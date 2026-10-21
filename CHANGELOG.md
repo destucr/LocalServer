@@ -4,6 +4,8 @@ All notable changes to Switchboard. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+## [1.8.4] - 2026-10-22
+
 ### Fixed
 - Clicking outside Switchboard, on another app's window, now closes the popover. It sometimes stayed open.
 
