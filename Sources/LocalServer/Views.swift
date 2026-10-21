@@ -60,6 +60,11 @@ struct RootView: View {
                 Text("\(store.visible.count) listening").font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Menu {
+                    Button("About LocalServer \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")") {
+                        NSApp.activate(ignoringOtherApps: true)
+                        NSApp.orderFrontStandardAboutPanel(nil)
+                    }
+                    Divider()
                     Toggle("Show system & apps", isOn: $store.showAll)
                     Toggle("Launch at login", isOn: Binding(get: { store.launchAtLogin }, set: { store.launchAtLogin = $0 }))
                     Divider()

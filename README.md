@@ -28,6 +28,19 @@ Requires macOS 14+ and the Swift toolchain (Xcode or Command Line Tools).
 ./build.sh install   # build, copy to /Applications, launch
 ```
 
+After changing code, run `./build.sh install` again — it stops the running app, replaces `/Applications/LocalServer.app` and relaunches it.
+
+### Versioning
+
+The version lives in the `VERSION` file and is stamped into the app (shown in the gear menu → About). To cut a release:
+
+```sh
+echo 1.1.0 > VERSION && git commit -am "Release 1.1.0"
+git tag v1.1.0 && git push --tags
+./build.sh release        # build/LocalServer-1.1.0.zip
+gh release create v1.1.0 build/LocalServer-1.1.0.zip --generate-notes
+```
+
 "Launch at login" only works once the app is in `/Applications`. The app is ad-hoc signed and not sandboxed — it needs to inspect and signal your processes.
 
 ## Debug helpers
