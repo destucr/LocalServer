@@ -48,7 +48,9 @@ final class TunnelManager: ObservableObject {
             guard !s.isEmpty, let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) else { return }
             let r = Range(m.range(at: m.numberOfRanges > 1 ? 1 : 0), in: s)!
             let url = String(s[r])
-            Task { @MainActor in if case .starting = t?.state { t?.state = .running(url); Actions.copy(url) } }
+            Task { @MainActor in
+                if case .starting = t?.state { t?.state = .running(url); Actions.copy(url); Store.shared.flash("Public link copied: \(url)") }
+            }
         }
         p.terminationHandler = { [weak self, weak t] proc in
             pipe.fileHandleForReading.readabilityHandler = nil

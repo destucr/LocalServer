@@ -46,5 +46,16 @@ struct PortEntry: Identifiable, Hashable {
     var web: WebKind
     var restart: RestartSpec?
 
+    /// What Copy puts on the clipboard, and what the row shows so you can see it first.
+    var address: String {
+        if web != .none { return localURL.absoluteString }
+        let t = (title + " " + (container?.image ?? "")).lowercased()
+        let schemes = ["postgres": "postgresql", "mysql": "mysql", "mariadb": "mysql", "mongo": "mongodb", "redis": "redis", "valkey": "redis"]
+        if let scheme = schemes.first(where: { t.contains($0.key) })?.value { return "\(scheme)://localhost:\(port)" }
+        return "localhost:\(port)"
+    }
+
+    var copyLabel: String { address.contains("://") ? "Copy URL" : "Copy address" }
+
     var localURL: URL { URL(string: "\(port == 443 || port == 8443 ? "https" : "http")://localhost:\(port)")! }
 }

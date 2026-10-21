@@ -8,7 +8,8 @@ final class Store: ObservableObject {
     @Published var query = ""
     @Published var showAll = false
     @Published var message: String?
-    @Published var busy: Set<String> = []
+    @Published var busy: [String: String] = [:]   // row id → what it is doing, e.g. "Restarting…"
+    @Published var copiedID: String?
     @Published var armedKill: String?
     static let shared = Store()
     let tunnels = TunnelManager()
@@ -85,43 +86,49 @@ final class Store: ObservableObject {
             return
         }
         armedKill = nil
-        perform(e, success: "Stopped :\(e.port)") { try await Actions.kill(e) }
+        perform(e, label: "Stopping…", success: "Stopped :\(e.port)") { try await Actions.kill(e) }
     }
 
     func restart(_ e: PortEntry) {
-        perform(e, success: "Restarted :\(e.port)") { try await Actions.restart(e) }
+        perform(e, label: "Restarting…", success: e.container == nil ? "Restarted :\(e.port). Its output is saved in ~/Library/Logs/LocalServer, so Logs works now." : "Restarted :\(e.port)") { try await Actions.restart(e) }
     }
 
     func tail(_ e: PortEntry) {
         do { try Actions.tail(e) } catch { flash(error.localizedDescription) }
     }
 
-    private func perform(_ e: PortEntry, success: String, _ work: @escaping () async throws -> Void) {
-        busy.insert(e.id)
+    private func perform(_ e: PortEntry, label: String, success: String, _ work: @escaping () async throws -> Void) {
+        busy[e.id] = label
         Task {
             do { try await work(); flash(success) } catch { flash(error.localizedDescription) }
             try? await Task.sleep(for: .milliseconds(600))
             await refresh()
-            busy.remove(e.id)
+            busy[e.id] = nil
         }
     }
 
     func copyLocal(_ e: PortEntry) {
-        let text = e.web == .none ? "localhost:\(e.port)" : e.localURL.absoluteString
-        Actions.copy(text)
-        flash("Copied \(text)")
+        Actions.copy(e.address)
+        flash("Copied \(e.address)")
+        markCopied(e.id)
+    }
+
+    /// Makes the row's button say "Copied" for a moment.
+    func markCopied(_ id: String) {
+        copiedID = id
+        Task { try? await Task.sleep(for: .seconds(1.6)); if copiedID == id { copiedID = nil } }
     }
 
     func copyLAN(_ e: PortEntry) {
         guard let ip = Actions.lanAddress() else { flash("No LAN address found"); return }
         let url = "http://\(ip):\(e.port)"
         Actions.copy(url)
-        flash(e.lanExposed ? "Copied \(url)" : "Copied \(url) — bound to localhost only, LAN can't reach it")
+        flash(e.lanExposed ? "Copied \(url). Anyone on your Wi-Fi can open it." : "Copied \(url), but this server only listens on localhost, so other devices can't reach it.")
     }
 
     func toggleTunnel(_ e: PortEntry) {
         if tunnels.tunnels[e.port] != nil { tunnels.stop(port: e.port); return }
-        do { try tunnels.start(port: e.port); flash("Starting tunnel…") } catch { flash(error.localizedDescription) }
+        do { try tunnels.start(port: e.port); flash("Starting a public link. It is copied as soon as it is ready.") } catch { flash(error.localizedDescription) }
     }
 
     var launchAtLogin: Bool {

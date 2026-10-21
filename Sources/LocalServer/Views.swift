@@ -108,14 +108,14 @@ struct PortCard: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(inUse ? "Port \(String(port)) is in use" : "Port \(String(port)) is free").font(.system(size: 13, weight: .semibold))
                 Text(!inUse ? "Go ahead and start your server"
-                     : owners.isEmpty ? "Held by a process LocalServer can't see (other user or system)"
-                     : "Press Stop on the row below to free it")
+                     : owners.isEmpty ? "Held by a process LocalServer can't see. Next free port is \(String(next))."
+                     : "Stop it below to free the port. Next free port is \(String(next)).")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             if inUse {
-                Button("Copy \(String(next))") { Actions.copy(String(next)); store.flash("Copied \(next) — next free port") }
-                    .controlSize(.small).help("Next free port")
+                Button("Copy \(String(next))") { Actions.copy(String(next)); store.flash("Copied \(next), the next free port") }
+                    .controlSize(.small).help("Copy the next free port number")
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
@@ -155,7 +155,8 @@ struct RowView: View {
     }
 
     private var armed: Bool { store.armedKill == entry.id }
-    private var working: Bool { store.busy.contains(entry.id) }
+    private var busyLabel: String? { store.busy[entry.id] }
+    private var copied: Bool { store.copiedID == entry.id }
     private var canRestart: Bool { entry.container != nil || entry.restart != nil }
 
     var body: some View {
@@ -174,70 +175,91 @@ struct RowView: View {
                     }
                     if entry.lanExposed {
                         Image(systemName: "wifi").font(.system(size: 9)).foregroundStyle(.orange)
-                            .help("Reachable from your network (listening on all interfaces)")
+                            .help("Anyone on your network can reach this server (it listens on all interfaces)")
                     }
                 }
-                if let t = tunnels.tunnels[entry.port] { tunnelLine(t) }
+                // Show exactly what the button will copy, so there is nothing to guess.
+                if entry.web != .page {
+                    Text(entry.address).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle)
+                }
+                if let t = tunnels.tunnels[entry.port] { TunnelLine(tunnel: t) }
             }
             Spacer(minLength: 4)
-            if working {
+            if let label = busyLabel {
+                Text(label).font(.caption).foregroundStyle(.secondary)
                 ProgressView().controlSize(.small)
             } else {
-                if hover { secondaryActions } else if let up = entry.uptime {
-                    Text(up).font(.caption).foregroundStyle(.tertiary)
+                if armed {
+                    Text("Stop \(entry.title)?").font(.caption).foregroundStyle(.red)
+                } else if hover {
+                    secondaryActions
+                } else if let up = entry.uptime {
+                    Text("up \(up)").font(.caption).foregroundStyle(.tertiary)
                 }
-                if entry.web == .page {
-                    Button("Open") { store.open(entry) }
-                        .controlSize(.small).buttonStyle(.bordered)
-                } else {
-                    Button("Copy") { store.copyLocal(entry) }
-                        .controlSize(.small).buttonStyle(.bordered)
-                        .help(entry.web == .none ? "Copy localhost:\(entry.port)" : "Copy http://localhost:\(entry.port)")
-                }
+                mainButton
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
-        .frame(height: 38)
+        .frame(height: 44)
         .background(hover ? Color.primary.opacity(0.06) : .clear)
         .onHover { hover = $0 }
         .help("PID \(entry.pid.map(String.init) ?? "-")  \(entry.command)")
     }
 
-    private var secondaryActions: some View {
-        HStack(spacing: 0) {
-            if entry.web == .api {
-                IconButton(symbol: "arrow.up.forward.square", help: "Open in browser") { store.open(entry) }
+    @ViewBuilder private var mainButton: some View {
+        if armed {
+            Button("Yes, stop") { store.kill(entry) }
+                .controlSize(.small).buttonStyle(.borderedProminent).tint(.red)
+        } else if entry.web == .page {
+            Button("Open") { store.open(entry) }
+                .controlSize(.small).buttonStyle(.bordered)
+                .help("Open \(entry.address) in your browser")
+        } else {
+            Button { store.copyLocal(entry) } label: {
+                Text(copied ? "Copied ✓" : entry.copyLabel).frame(minWidth: 70)
             }
-            IconButton(symbol: "arrow.clockwise", help: "Restart") { store.restart(entry) }
-                .disabled(!canRestart)
-            IconButton(symbol: "text.alignleft", help: "Show logs") { store.tail(entry) }
-            shareMenu
-            IconButton(symbol: armed ? "exclamationmark.triangle.fill" : "stop.fill",
-                       help: armed ? "Click again to stop" : "Stop",
-                       tint: armed ? .red : Color.red.opacity(0.75)) { store.kill(entry) }
+            .controlSize(.small).buttonStyle(.bordered)
+            .tint(copied ? .green : nil)
+            .help("Copy \(entry.address)")
         }
     }
 
-    @ViewBuilder private func tunnelLine(_ t: Tunnel) -> some View {
-        TunnelLine(tunnel: t)
+    private var secondaryActions: some View {
+        HStack(spacing: 0) {
+            if entry.web == .api {
+                IconButton(symbol: "arrow.up.forward.square", help: "Open \(entry.address) in your browser") { store.open(entry) }
+            }
+            IconButton(symbol: "arrow.clockwise", help: canRestart ? "Restart with the same command" : "Can't restart: LocalServer doesn't know how this was started")
+                { store.restart(entry) }
+                .disabled(!canRestart)
+            IconButton(symbol: "text.alignleft", help: "Follow the logs in Terminal") { store.tail(entry) }
+            shareMenu
+            IconButton(symbol: "stop.fill", help: "Stop this server", tint: Color.red.opacity(0.75)) { store.kill(entry) }
+        }
     }
 
     private var shareMenu: some View {
-        Menu {
-            Button("Copy http://localhost:\(String(entry.port))") { store.copyLocal(entry) }
-            Button("Copy LAN URL") { store.copyLAN(entry) }
+        let lan = Actions.lanAddress().map { "http://\($0):\(entry.port)" } ?? "no network found"
+        return Menu {
+            Button("Copy link for this Mac:  \(entry.address)") { store.copyLocal(entry) }
+            Button(entry.lanExposed ? "Copy link for your Wi-Fi:  \(lan)" : "Copy link for your Wi-Fi (won't work, localhost only)") {
+                store.copyLAN(entry)
+            }
             Divider()
             if tunnels.tunnels[entry.port] != nil {
-                Button("Stop public tunnel") { store.toggleTunnel(entry) }
+                Button("Stop the internet link") { store.toggleTunnel(entry) }
+            } else if let p = TunnelManager.provider {
+                Button("Get a temporary internet link (via \(p.name))") { store.toggleTunnel(entry) }
             } else {
-                Button("Share via public tunnel" + (TunnelManager.provider.map { " (\($0.name))" } ?? "")) { store.toggleTunnel(entry) }
+                Button("Get an internet link (needs cloudflared: brew install cloudflared)") { store.toggleTunnel(entry) }
             }
         } label: {
             Image(systemName: "square.and.arrow.up").frame(width: 22, height: 22).contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         .disabled(entry.web == .none)
-        .help("Share")
+        .help("Share this server")
     }
 }
 
@@ -247,10 +269,11 @@ struct TunnelLine: View {
         HStack(spacing: 4) {
             Image(systemName: "globe").font(.caption2)
             switch tunnel.state {
-            case .starting: Text("Starting \(tunnel.provider) tunnel…")
+            case .starting: Text("Creating public link…")
             case .running(let url):
-                Button(url) { Actions.copy(url) }.buttonStyle(.plain).underline().help("Click to copy")
-            case .failed(let why): Text("Tunnel failed (\(why))")
+                Button(url) { Actions.copy(url); Store.shared.flash("Public link copied: \(url)") }
+                    .buttonStyle(.plain).underline().help("Public link, click to copy again")
+            case .failed(let why): Text("Public link failed (\(why))")
             }
         }
         .font(.caption).foregroundStyle(.blue).lineLimit(1)
