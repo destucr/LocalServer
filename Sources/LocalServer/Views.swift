@@ -5,7 +5,7 @@ struct RootView: View {
     @FocusState private var filterFocused: Bool
 
     // Fixed so the popover never changes size while you filter or toggle.
-    private let listHeight: CGFloat = 400
+    private let listHeight: CGFloat = 420
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,7 +41,7 @@ struct RootView: View {
             Divider()
             footer
         }
-        .frame(width: 400)
+        .frame(width: 440)
         .onReceive(NotificationCenter.default.publisher(for: .popoverDidShow)) { _ in
             store.query = ""
             filterFocused = true
@@ -181,10 +181,11 @@ struct RowView: View {
                 // Show exactly what the button will copy, so there is nothing to guess.
                 if entry.web != .page {
                     Text(entry.address).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(.secondary)
-                        .lineLimit(1).truncationMode(.middle)
+                        .lineLimit(1).fixedSize()
                 }
                 if let t = tunnels.tunnels[entry.port] { TunnelLine(tunnel: t) }
             }
+            .layoutPriority(1)
             Spacer(minLength: 4)
             if let label = busyLabel {
                 Text(label).font(.caption).foregroundStyle(.secondary)
@@ -195,7 +196,7 @@ struct RowView: View {
                 } else if hover {
                     secondaryActions
                 } else if let up = entry.uptime {
-                    Text("up \(up)").font(.caption).foregroundStyle(.tertiary)
+                    Text(up).font(.caption).foregroundStyle(.tertiary).lineLimit(1).fixedSize()
                 }
                 mainButton
             }
