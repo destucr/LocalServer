@@ -15,6 +15,15 @@ cp Resources/Info.plist "$APP/Contents/Info.plist"
 VERSION="$(tr -d '[:space:]' < VERSION)"
 BUILD="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" -c "Set :CFBundleVersion $BUILD" "$APP/Contents/Info.plist"
+# App icon, drawn by the app itself so there is no binary asset to keep in sync.
+ICONSET="build/AppIcon.iconset"
+rm -rf "$ICONSET"; mkdir -p "$ICONSET"
+"$BIN" --icon build/icon-1024.png
+for s in 16 32 128 256 512; do
+  sips -z $s $s build/icon-1024.png --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
+  sips -z $((s*2)) $((s*2)) build/icon-1024.png --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
+done
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 codesign --force --sign - "$APP" >/dev/null
 echo "Built $APP (v$VERSION, build $BUILD)"
 

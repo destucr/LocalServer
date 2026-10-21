@@ -3,6 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key><string>dev.localserver.menubar</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleName</key><string>LocalServer</string>
     <key>CFBundleDisplayName</key><string>LocalServer</string>
     <key>CFBundleExecutable</key><string>LocalServer</string>

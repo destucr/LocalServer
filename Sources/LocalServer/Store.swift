@@ -18,6 +18,8 @@ final class Store: ObservableObject {
     @Published var message: String?
     @Published var busy: [String: String] = [:]   // row key → what it is doing, e.g. "Restarting…"
     @Published var copiedID: String?
+    @Published private(set) var recent: Set<String> = []   // servers that just appeared
+    private var knownRunningKeys: Set<String>?
     @Published var armedKill: String?
     @Published private(set) var names: [String: String] = [:]
     @Published private(set) var pinned: Set<String> = []
@@ -125,11 +127,23 @@ final class Store: ObservableObject {
 
     func refresh() async {
         let result = await Task.detached(priority: .utility) { Scanner.scan() }.value
-        if result != entries { entries = result }
+        if result != entries { withAnimation(Motion.anim) { entries = result } }
         guard persistent else { return }
+        markNew(result)
         remember(result)
         detectStops(result)
         persist()
+    }
+
+    /// Rows that show up after the first scan get a short green highlight.
+    private func markNew(_ list: [PortEntry]) {
+        let keys = Set(list.filter { $0.kind != .other }.map(\.key))
+        defer { knownRunningKeys = keys }
+        guard let before = knownRunningKeys else { return }
+        let fresh = keys.subtracting(before)
+        guard !fresh.isEmpty else { return }
+        recent.formUnion(fresh)
+        Task { try? await Task.sleep(for: .seconds(2)); withAnimation(Motion.anim) { recent.subtract(fresh) } }
     }
 
     private func remember(_ list: [PortEntry]) {

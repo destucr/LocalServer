@@ -34,7 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let b = item.button {
-            b.image = NSImage(systemSymbolName: "point.3.connected.trianglepath.dotted", accessibilityDescription: "LocalServer")
+            b.image = IconArt.menuBar(active: false)
             b.imagePosition = .imageLeading
             b.target = self
             b.action = #selector(toggle)
@@ -51,7 +51,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func updateTitle() { item.button?.title = " \(store.count)" }
+    private func updateTitle() {
+        let n = store.count
+        item.button?.image = IconArt.menuBar(active: n > 0)
+        item.button?.title = n > 0 ? " \(n)" : ""
+        item.button?.setAccessibilityLabel("LocalServer, \(n) running")
+    }
 
     @objc private func toggle() {
         if popover.isShown { popover.performClose(nil); return }

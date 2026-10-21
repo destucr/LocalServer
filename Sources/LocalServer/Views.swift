@@ -1,5 +1,48 @@
 import SwiftUI
 
+/// Color tells you what a button is for: blue is the main action, green brings something back, red stops something.
+enum Tone {
+    case open, start, quiet, copied, stop
+
+    private static func adaptive(_ light: NSColor, _ dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light })
+    }
+    static let green = adaptive(NSColor(red: 0.10, green: 0.52, blue: 0.26, alpha: 1), NSColor(red: 0.20, green: 0.62, blue: 0.33, alpha: 1))
+    static let red = adaptive(NSColor(red: 0.82, green: 0.17, blue: 0.15, alpha: 1), NSColor(red: 0.86, green: 0.26, blue: 0.24, alpha: 1))
+
+    var fill: Color {
+        switch self {
+        case .open: return .accentColor
+        case .start: return Tone.green
+        case .stop: return Tone.red
+        case .quiet: return Color.accentColor.opacity(0.14)
+        case .copied: return Tone.green.opacity(0.18)
+        }
+    }
+    var text: Color {
+        switch self {
+        case .open, .start, .stop: return .white
+        case .quiet: return .accentColor
+        case .copied: return Tone.green
+        }
+    }
+}
+
+struct PillButton: ButtonStyle {
+    let tone: Tone
+    var width: CGFloat = 78
+    @Environment(\.isEnabled) private var enabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(tone.text)
+            .frame(width: width, height: 22)
+            .background(tone.fill.opacity(configuration.isPressed ? 0.75 : 1), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .opacity(enabled ? 1 : 0.45)
+    }
+}
+
 enum Theme {
     /// Screenshots are rendered offscreen where there is nothing to blur, so they use a flat tint instead.
     static var flat = false
@@ -29,11 +72,7 @@ struct RootView: View {
                 if let port = store.portQuery { PortCard(port: port) }
                 if store.groups.isEmpty {
                     if store.portQuery == nil {
-                        VStack(spacing: 6) {
-                            Image(systemName: "powersleep").font(.title2).foregroundStyle(.secondary)
-                            Text(store.query.isEmpty ? "Nothing is listening" : "No matches").foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        EmptyState()
                     } else {
                         Spacer(minLength: 0)
                     }
@@ -42,8 +81,8 @@ struct RootView: View {
                         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                             ForEach(store.groups) { g in
                                 Section {
-                                    ForEach(g.running) { RowView(entry: $0) }
-                                    ForEach(g.stopped) { StoppedRow(server: $0) }
+                                    ForEach(g.running) { RowView(entry: $0).transition(.opacity.combined(with: .move(edge: .top))) }
+                                    ForEach(g.stopped) { StoppedRow(server: $0).transition(.opacity) }
                                 } header: {
                                     GroupHeader(group: g)
                                 }
@@ -115,6 +154,38 @@ struct RootView: View {
     }
 }
 
+/// Shown when the list is empty: nothing running yet, or the filter matches nothing.
+struct EmptyState: View {
+    @EnvironmentObject var store: Store
+
+    var body: some View {
+        VStack(spacing: 14) {
+            VStack(spacing: 7) {
+                ForEach(0..<2, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.secondary.opacity(0.6), lineWidth: 1.5)
+                        .frame(width: 70, height: 28)
+                        .overlay(alignment: .leading) {
+                            HStack(spacing: 8) {
+                                Circle().strokeBorder(Color.secondary.opacity(0.8), lineWidth: 1.5).frame(width: 8, height: 8)
+                                Capsule().fill(Color.secondary.opacity(0.3)).frame(width: 28, height: 3)
+                            }.padding(.leading, 12)
+                        }
+                }
+            }
+            if store.query.isEmpty {
+                Text("Nothing is running").font(.system(size: 14, weight: .semibold))
+                Text("Start a dev server and it shows up here.").font(.callout).foregroundStyle(.secondary)
+            } else {
+                Text("No match for “\(store.query)”").font(.system(size: 14, weight: .semibold))
+                Button("Clear filter") { store.query = "" }.controlSize(.small)
+            }
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 /// "Is port N free? Who has it? What's the next one?" Shown when the filter is a port number.
 struct PortCard: View {
     @EnvironmentObject var store: Store
@@ -137,7 +208,7 @@ struct PortCard: View {
             Spacer()
             if inUse {
                 Button("Copy \(String(next))") { Actions.copy(String(next)); store.flash("Copied \(next), the next free port") }
-                    .controlSize(.small).help("Copy the next free port number")
+                    .buttonStyle(PillButton(tone: .quiet, width: 74)).help("Copy the next free port number")
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
@@ -248,7 +319,7 @@ struct RowView: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
         .frame(height: 44)
-        .background(hover ? Color.primary.opacity(0.07) : .clear)
+        .background(store.recent.contains(entry.key) ? Color.green.opacity(0.18) : (hover ? Color.primary.opacity(0.07) : .clear))
         .onHover { hover = $0 }
         .help("PID \(entry.pid.map(String.init) ?? "-")  \(entry.command)")
     }
@@ -265,18 +336,17 @@ struct RowView: View {
 
     @ViewBuilder private var mainButton: some View {
         if armed {
-            Button { store.kill(entry) } label: { Text("Yes, stop").frame(width: 78) }
-                .controlSize(.small).buttonStyle(.borderedProminent).tint(.red)
+            Button { store.kill(entry) } label: { Text("Yes, stop") }
+                .buttonStyle(PillButton(tone: .stop))
         } else if entry.web == .page {
-            Button { store.open(entry) } label: { Text("Open").frame(width: 78) }
-                .controlSize(.small).buttonStyle(.bordered)
+            Button { store.open(entry) } label: { Text("Open") }
+                .buttonStyle(PillButton(tone: .open))
                 .help("Open \(entry.address) in your browser")
         } else {
             Button { store.copyLocal(entry) } label: {
-                Text(copied ? "Copied ✓" : entry.copyLabel).frame(width: 78)
+                Text(copied ? "Copied ✓" : entry.copyLabel).animation(Motion.anim, value: copied)
             }
-            .controlSize(.small).buttonStyle(.bordered)
-            .tint(copied ? .green : nil)
+            .buttonStyle(PillButton(tone: copied ? .copied : .quiet))
             .help("Copy \(entry.address)")
         }
     }
@@ -288,7 +358,7 @@ struct RowView: View {
                 .disabled(!canRestart)
             IconButton(symbol: "text.alignleft", help: "Follow the logs in Terminal") { store.tail(entry) }
             shareMenu
-            IconButton(symbol: "stop.fill", help: "Stop this server", tint: Color.red.opacity(0.8)) { store.kill(entry) }
+            IconButton(symbol: "stop.fill", help: "Stop this server", tint: Tone.red) { store.kill(entry) }
             moreMenu
         }
     }
@@ -360,8 +430,8 @@ struct StoppedRow: View {
                     IconButton(symbol: "xmark", help: "Forget this server") { store.forget(server) }
                 }
                 if server.canStart {
-                    Button { store.start(server) } label: { Text("Start").frame(width: 78) }
-                        .controlSize(.small).buttonStyle(.borderedProminent)
+                    Button { store.start(server) } label: { Text("Start") }
+                        .buttonStyle(PillButton(tone: .start))
                         .help(server.containerID != nil ? "Start this container again" : "Run it again in \(abbreviateHome(server.start?.cwd ?? ""))")
                 } else {
                     Text("not running").font(.caption).foregroundStyle(.secondary)

@@ -7,6 +7,13 @@ if CommandLine.arguments.contains("--scan") {
     }
     exit(0)
 }
+// Build helper: `LocalServer --icon out.png` draws the app icon.
+if let i = CommandLine.arguments.firstIndex(of: "--icon"), CommandLine.arguments.count > i + 1 {
+    _ = NSApplication.shared
+    try? IconArt.appIcon().representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
+    exit(0)
+}
+
 // Debug helper: `LocalServer --act start <port>` starts a remembered (stopped) server from the saved state.
 if let i = CommandLine.arguments.firstIndex(of: "--act"), CommandLine.arguments.count > i + 2,
    CommandLine.arguments[i + 1] == "start", let port = Int(CommandLine.arguments[i + 2]) {
