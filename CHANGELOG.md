@@ -4,6 +4,9 @@ All notable changes to Switchboard. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Fixed
+- Switchboard could quit by itself a few seconds after starting. Looking up open tmux and zellij sessions ran while the window was being drawn. It now happens in the background.
+
 ## [1.8.1] - 2026-10-22
 
 ### Fixed

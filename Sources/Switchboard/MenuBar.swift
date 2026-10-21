@@ -120,6 +120,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.contentViewController?.view.window?.makeKey()
         store.logs?.start()
         NotificationCenter.default.post(name: .popoverDidShow, object: nil)
-        Task { await store.refresh() }
+        Task { await store.refresh(); await store.refreshMux() }
     }
 }

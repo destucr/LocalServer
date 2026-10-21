@@ -209,7 +209,7 @@ struct RootView: View {
                     Toggle("Notify when a server stops", isOn: $store.notifyOnStop)
                     Toggle("Show system & apps", isOn: $store.showAll)
                     Picker("Terminal for logs", selection: Binding(get: { store.logTerminal }, set: { store.setLogTerminal($0) })) {
-                        ForEach(TerminalApp.installed) { Text($0.name).tag($0) }
+                        ForEach(store.terminals) { Text($0.name).tag($0) }
                     }
                     Toggle("Check for updates", isOn: $store.checkForUpdates)
                     Button("Check for updates now") { store.checkUpdate(force: true) }
@@ -653,7 +653,7 @@ struct ServerMenu: View {
         Divider()
         Button("Restart") { store.restart(entry) }.disabled(entry.container == nil && entry.restart == nil)
         Button("Show logs") { store.tail(entry) }
-        Menu("Show logs in") { ForEach(TerminalApp.installed) { app in Button(app.name) { store.tailInTerminal(entry, app) } } }
+        Menu("Show logs in") { ForEach(store.terminals) { app in Button(app.name) { store.tailInTerminal(entry, app) } } }
         Button("Stop") { store.kill(entry) }
         Divider()
         Button(store.isPinned(entry.key) ? "Unpin" : "Pin to top") { store.togglePin(entry) }

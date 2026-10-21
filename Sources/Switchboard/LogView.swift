@@ -270,7 +270,7 @@ struct TerminalMenu: View {
     let open: (TerminalApp) -> Void
 
     private var choices: some View {
-        ForEach(TerminalApp.installed) { app in
+        ForEach(store.terminals) { app in
             Button { open(app) } label: {
                 if store.hasLogTerminal && app == store.logTerminal { Label(app.name, systemImage: "checkmark") } else { Text(app.name) }
             }

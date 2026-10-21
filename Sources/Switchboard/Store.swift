@@ -27,6 +27,7 @@ final class Store: ObservableObject {
     @Published private(set) var mapPan: CGSize = .zero
     @Published private(set) var mapZoom: CGFloat = 1
     @Published var logs: LogTail?
+    @Published private(set) var muxSessions: [TerminalApp] = []   // filled in the background, because finding them runs processes
     @Published private(set) var update: ReleaseInfo?   // set only when a newer release exists
     @Published private(set) var updating = false
     @Published var checkForUpdates: Bool {
@@ -169,6 +170,7 @@ final class Store: ObservableObject {
         if let s = selectedKey, !navKeys.contains(s) { selectedKey = nil }
         guard persistent else { return }
         refreshTick += 1
+        if refreshTick % 4 == 1 { await refreshMux() }
         if showMap || (refreshTick % 5 == 0 && result.filter({ $0.kind != .other }).count >= 2) {
             let map = await Task.detached(priority: .utility) { Scanner.stack(entries: result) }.value
             if showMap { withAnimation(Motion.pop) { stack = map } }
@@ -670,16 +672,24 @@ final class Store: ObservableObject {
         withAnimation(Motion.anim) { logs = nil }
     }
 
+    /// Terminal apps, then the tmux and zellij sessions open right now. Reads stored values only, so it is safe in a view.
+    var terminals: [TerminalApp] { TerminalApp.apps + muxSessions }
+
+    func refreshMux() async {
+        let found = await Task.detached(priority: .utility) { Multiplexers.scan() }.value
+        if found != muxSessions { muxSessions = found }
+    }
+
     /// True once a terminal was picked and is still installed.
     var hasLogTerminal: Bool {
         guard let id = UserDefaults.standard.string(forKey: "logTerminal") else { return false }
-        return TerminalApp.installed.contains { $0.id == id }
+        return terminals.contains { $0.id == id }
     }
 
     /// The terminal last used for logs, if it is still installed.
     var logTerminal: TerminalApp {
         let id = UserDefaults.standard.string(forKey: "logTerminal")
-        return TerminalApp.installed.first { $0.id == id } ?? TerminalApp.apps.first ?? .fallback
+        return terminals.first { $0.id == id } ?? TerminalApp.apps.first ?? .fallback
     }
 
     /// Picked in the settings menu: remembered without opening anything.

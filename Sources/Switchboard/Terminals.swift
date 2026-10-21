@@ -20,8 +20,6 @@ struct TerminalApp: Identifiable, Hashable {
     ]
 
     static var apps: [TerminalApp] { all.filter { $0.url != nil } }
-    /// Terminal apps, then the tmux and zellij sessions that are open right now.
-    static var installed: [TerminalApp] { apps + Multiplexers.sessions() }
     static let fallback = all[0]
 
     /// The app's own icon, so the button looks like the terminal it opens.
@@ -54,14 +52,12 @@ struct TerminalApp: Identifiable, Hashable {
 
 /// Sessions that are already open in tmux or zellij. A log opens as a new window or pane there, so nothing new is created on screen.
 enum Multiplexers {
-    private static var cache: (at: Date, list: [TerminalApp])?
-
     static func binary(_ name: String) -> String? {
         ["/opt/homebrew/bin/", "/usr/local/bin/", "/usr/bin/"].map { $0 + name }.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
-    static func sessions() -> [TerminalApp] {
-        if let c = cache, Date().timeIntervalSince(c.at) < 2 { return c.list }
+    /// Runs tmux and zellij, so it must never be called while a view is being drawn. The Store calls it in the background.
+    static func scan() -> [TerminalApp] {
         var out: [TerminalApp] = []
         if let t = binary("tmux") {
             // Only sessions with a window attached, since a log in a detached session would open where nobody looks.
@@ -81,12 +77,10 @@ enum Multiplexers {
                 }
             }
         }
-        cache = (Date(), out)
         return out
     }
 
     static func run(_ mux: TerminalApp.Mux, session: String, script: URL, title: String) -> Bool {
-        cache = nil
         switch mux {
         case .tmux:
             guard let t = binary("tmux") else { return false }
