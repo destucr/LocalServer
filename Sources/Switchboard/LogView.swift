@@ -260,23 +260,34 @@ struct LogView: View {
     }
 }
 
-/// Pick which terminal app takes the log. The last pick is remembered and ticked.
+/// The terminal button. The first time it asks which terminal to use. After that a click opens the one you picked,
+/// and holding the button shows the list again to change it.
 struct TerminalMenu: View {
     @EnvironmentObject var store: Store
-    var title = "Open in a terminal"
     let open: (TerminalApp) -> Void
 
-    var body: some View {
-        Menu {
-            ForEach(TerminalApp.installed) { app in
-                Button { open(app) } label: {
-                    if app == store.logTerminal { Label(app.name, systemImage: "checkmark") } else { Text(app.name) }
-                }
+    private var label: some View {
+        Image(systemName: "terminal").frame(width: 24, height: 24).contentShape(Rectangle())
+    }
+
+    private var choices: some View {
+        ForEach(TerminalApp.installed) { app in
+            Button { open(app) } label: {
+                if store.hasLogTerminal && app == store.logTerminal { Label(app.name, systemImage: "checkmark") } else { Text(app.name) }
             }
-        } label: {
-            Image(systemName: "terminal").frame(width: 24, height: 24).contentShape(Rectangle())
+        }
+    }
+
+    var body: some View {
+        Group {
+            if store.hasLogTerminal {
+                Menu { choices } label: { label } primaryAction: { open(store.logTerminal) }
+                    .hoverTip("Open in \(store.logTerminal.name). Hold to change.", tint: Brand.primary)
+            } else {
+                Menu { choices } label: { label }
+                    .hoverTip("Open in a terminal", tint: Brand.primary)
+            }
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-        .hoverTip(title, tint: Brand.primary)
     }
 }

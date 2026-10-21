@@ -623,6 +623,12 @@ final class Store: ObservableObject {
         withAnimation(Motion.anim) { logs = nil }
     }
 
+    /// True once a terminal was picked and is still installed.
+    var hasLogTerminal: Bool {
+        guard let id = UserDefaults.standard.string(forKey: "logTerminal") else { return false }
+        return TerminalApp.installed.contains { $0.id == id }
+    }
+
     /// The terminal last used for logs, if it is still installed.
     var logTerminal: TerminalApp {
         let id = UserDefaults.standard.string(forKey: "logTerminal")
