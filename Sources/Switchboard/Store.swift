@@ -97,7 +97,7 @@ final class Store: ObservableObject {
         notifyOnStop = d.object(forKey: "notifyOnStop") as? Bool ?? true
         checkForUpdates = d.object(forKey: "checkForUpdates") as? Bool ?? true
         load()
-        Task { try? await Task.sleep(for: .seconds(6)); self.checkUpdate(force: false) }
+        Task { try? await Task.sleep(for: .seconds(6)); self.checkUpdate(force: false, minAge: 900) }   // at launch, unless it just asked
         if notifyOnStop { Notifier.requestPermission() }
 
         Task { [weak self] in
@@ -170,6 +170,7 @@ final class Store: ObservableObject {
         if let s = selectedKey, !navKeys.contains(s) { selectedKey = nil }
         guard persistent else { return }
         refreshTick += 1
+        if refreshTick % 20 == 0 { checkUpdate(force: false) }   // the app can run for days, so ask again while it runs
         if refreshTick % 4 == 1 { await refreshMux() }
         if showMap || (refreshTick % 5 == 0 && result.filter({ $0.kind != .other }).count >= 2) {
             let map = await Task.detached(priority: .utility) { Scanner.stack(entries: result) }.value
@@ -619,12 +620,12 @@ final class Store: ObservableObject {
 
     // MARK: Updates
 
-    /// Quietly, at most once a day. `force` is for the menu item: it always asks and always answers.
-    func checkUpdate(force: Bool) {
+    /// Quietly, at most every few hours. `force` is for the menu item: it always asks and always answers.
+    func checkUpdate(force: Bool, minAge: TimeInterval = 10_800) {
         let d = UserDefaults.standard
         if !force {
             guard checkForUpdates, Updates.current != "dev" else { return }
-            if let last = d.object(forKey: "lastUpdateCheck") as? Date, Date().timeIntervalSince(last) < 86_400 { return }
+            if let last = d.object(forKey: "lastUpdateCheck") as? Date, Date().timeIntervalSince(last) < minAge { return }
         }
         Task {
             switch await Updates.latest() {
