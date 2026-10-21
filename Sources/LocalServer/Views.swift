@@ -1,9 +1,17 @@
 import SwiftUI
 
-// Colors come from the system so light and dark mode both keep their contrast.
-private extension Color {
-    static let listBackground = Color(nsColor: .textBackgroundColor)
-    static let band = Color(nsColor: .windowBackgroundColor)
+enum Theme {
+    /// Screenshots are rendered offscreen where there is nothing to blur, so they use a flat tint instead.
+    static var flat = false
+    /// Screenshot only: a solid color behind everything, used to recover transparency.
+    static var matte: Color?
+}
+
+/// Project header bands: the system bar material, so rows blur underneath as they scroll past.
+struct BandBackground: View {
+    var body: some View {
+        if Theme.flat { Color.primary.opacity(0.07) } else { Rectangle().fill(.bar) }
+    }
 }
 
 struct RootView: View {
@@ -49,7 +57,7 @@ struct RootView: View {
             footer
         }
         .frame(width: 470)
-        .background(Color.listBackground)
+        .background { if let m = Theme.matte { Rectangle().fill(m) } }
         .onReceive(NotificationCenter.default.publisher(for: .popoverDidShow)) { _ in
             store.query = ""
             filterFocused = true
@@ -75,7 +83,7 @@ struct RootView: View {
                 Text(m).font(.caption).foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(Color.band)
+                    .background(BandBackground())
                     .transition(.opacity)
             }
             HStack(spacing: 10) {
@@ -148,7 +156,7 @@ struct GroupHeader: View {
     var body: some View {
         HStack(spacing: 6) {
             if group.name == "Pinned" { Image(systemName: "pin.fill").font(.system(size: 10)).foregroundStyle(.secondary) }
-            Text(group.name.uppercased()).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+            Text(group.name).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
             Spacer()
             Menu {
                 if let path = group.path {
@@ -170,7 +178,7 @@ struct GroupHeader: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.band)
+        .background(BandBackground())
     }
 }
 
@@ -194,7 +202,7 @@ struct RowView: View {
         HStack(spacing: 10) {
             Circle().fill(.green).frame(width: 7, height: 7)
             Text(String(entry.port))
-                .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                .font(.system(size: 15, weight: .semibold)).monospacedDigit()
                 .frame(width: 58, alignment: .leading)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
@@ -216,7 +224,7 @@ struct RowView: View {
                 }
                 // Show exactly what the button will copy, so there is nothing to guess.
                 if entry.web != .page {
-                    Text(entry.address).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(.secondary)
+                    Text(entry.address).font(.system(size: 11)).foregroundStyle(.secondary)
                         .lineLimit(1).fixedSize()
                 }
                 if let t = tunnels.tunnels[entry.port] { TunnelLine(tunnel: t) }
@@ -336,7 +344,7 @@ struct StoppedRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Circle().strokeBorder(Color.secondary, lineWidth: 1).frame(width: 7, height: 7)
-            Text(String(server.port)).font(.system(size: 15, weight: .semibold, design: .monospaced))
+            Text(String(server.port)).font(.system(size: 15, weight: .semibold)).monospacedDigit()
                 .foregroundStyle(.secondary).frame(width: 58, alignment: .leading)
             VStack(alignment: .leading, spacing: 1) {
                 Text(store.names[server.key] ?? server.title).font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
