@@ -26,7 +26,7 @@ enum CLI {
         case "stop": return stop(rest.first { !$0.hasPrefix("-") })
         case "export": return export(rest.first { !$0.hasPrefix("-") }, force: rest.contains("--force"))
         case "why": return why(rest.first.flatMap { Int($0) })
-        case "version", "--version": print("Switchboard \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")"); return 0
+        case "version", "--version": print("Switchboard \(appVersion())"); return 0
         default: print(help); return 0
         }
     }
@@ -163,4 +163,14 @@ private extension Result where Failure == Error {
     init(_ body: () async throws -> Success) async {
         do { self = .success(try await body()) } catch { self = .failure(error) }
     }
+}
+
+
+/// The CLI runs through a symlink in the Homebrew bin, so Bundle.main can't see the app's Info.plist.
+private func appVersion() -> String {
+    if let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String { return v }
+    let exe = (Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])).resolvingSymlinksInPath()
+    let plist = exe.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Info.plist")
+    let info = NSDictionary(contentsOf: plist)
+    return info?["CFBundleShortVersionString"] as? String ?? "dev"
 }
