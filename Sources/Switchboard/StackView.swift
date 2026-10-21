@@ -54,6 +54,7 @@ struct StackMapView: View {
 
                 ZStack(alignment: .topLeading) {
                     Canvas { ctx, _ in
+                        drawProjects(in: &ctx, points: points, map: map, width: layout.nodeW)
                         for e in map.edges { draw(edge: e, in: &ctx, points: points, map: map) }
                     }
                     ForEach(map.edges.filter { $0.count > 1 }, id: \.self) { e in
@@ -81,6 +82,10 @@ struct StackMapView: View {
                                         }
                                 )
                                 .onHover { inside in if inside { NSCursor.openHand.push() } else { NSCursor.pop() } }
+                                .contextMenu {
+                                    if let e = store.entries.first(where: { $0.id == n.entryID }) { ServerMenu(entry: e) }
+                                    else { Text("\(n.title)\(n.port.map { " :\($0)" } ?? "")") }
+                                }
                                 .position(x: p.x, y: p.y + 17)
                         }
                     }
@@ -112,6 +117,25 @@ struct StackMapView: View {
                 .overlay(alignment: .bottomLeading) { if selected == nil { Legend().padding(.horizontal, 12).padding(.bottom, 2) } }
             }
             .padding(.vertical, 8)
+        }
+    }
+
+    /// A faint labelled box around each project's servers, like the network boxes in a cloud diagram.
+    /// Skipped when boxes would overlap, because a messy box is worse than none.
+    private func drawProjects(in ctx: inout GraphicsContext, points: [String: CGPoint], map: StackMap, width: CGFloat) {
+        var boxes: [(name: String, rect: CGRect)] = []
+        for (name, nodes) in Dictionary(grouping: map.nodes.filter { $0.role != .missing && $0.project != nil && points[$0.id] != nil }, by: { $0.project! }) {
+            let ps = nodes.compactMap { points[$0.id] }
+            guard let minX = ps.map(\.x).min(), let maxX = ps.map(\.x).max(), let minY = ps.map(\.y).min(), let maxY = ps.map(\.y).max() else { continue }
+            boxes.append((name, CGRect(x: minX - width / 2 - 10, y: minY - tile / 2 - 24, width: maxX - minX + width + 20, height: maxY - minY + tile + 34 + 34)))
+        }
+        for i in boxes.indices { for j in boxes.indices where j > i && boxes[i].rect.intersects(boxes[j].rect) { return } }
+        for b in boxes {
+            let path = RoundedRectangle(cornerRadius: 14, style: .continuous).path(in: b.rect)
+            ctx.fill(path, with: .color(Color.primary.opacity(0.035)))
+            ctx.stroke(path, with: .color(Color.secondary.opacity(0.4)), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+            ctx.draw(Text(b.name).font(.system(size: 10.5, weight: .medium)).foregroundStyle(Color.secondary),
+                     at: CGPoint(x: b.rect.minX + 11, y: b.rect.minY + 8), anchor: .topLeading)
         }
     }
 

@@ -9,6 +9,12 @@ private struct SavedState: Codable {
     var pinned: Set<String> = []
 }
 
+/// A button shown next to a message, for example "Undo" after Stop.
+struct UndoAction {
+    var label: String
+    var run: @MainActor () -> Void
+}
+
 @MainActor
 final class Store: ObservableObject {
     @Published private(set) var entries: [PortEntry] = []
@@ -23,6 +29,7 @@ final class Store: ObservableObject {
     @Published var showMap: Bool { didSet { UserDefaults.standard.set(showMap, forKey: "showMap"); if showMap { Task { await refresh() } } } }
     @Published var showAll = false
     @Published var message: String?
+    @Published private(set) var undo: UndoAction?
     @Published var busy: [String: String] = [:]   // row key → what it is doing, e.g. "Restarting…"
     @Published var copiedID: String?
     @Published private(set) var hoverKey: String?
@@ -315,13 +322,21 @@ final class Store: ObservableObject {
 
     // MARK: Messages
 
-    func flash(_ text: String) {
+    func flash(_ text: String, undo: UndoAction? = nil) {
         message = text
+        self.undo = undo
         messageTask?.cancel()
         messageTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(4))
-            if !Task.isCancelled { self?.message = nil }
+            try? await Task.sleep(for: .seconds(undo == nil ? 4 : 8))   // longer when there is something to click
+            if !Task.isCancelled { self?.message = nil; self?.undo = nil }
         }
+    }
+
+    func runUndo() {
+        let u = undo
+        undo = nil
+        message = nil
+        u?.run()
     }
 
     /// Called each time the popover opens: read the wallpaper under it and set the tint that keeps text readable.
@@ -485,7 +500,9 @@ final class Store: ObservableObject {
                 guard Dialogs.confirm("\(users.count) running server\(users.count == 1 ? " uses" : "s use") \(displayName(e))", list + "\n\nThey will lose their connection if you stop it.", ok: "Stop anyway") else { return }
             }
             expectedStops[e.key] = Date()
-            perform(e.key, label: "Stopping…", success: "Stopped :\(e.port). Press Start to bring it back.") { try await Actions.kill(e) }
+            let again = known[e.key].flatMap { $0.canStart ? $0 : nil }
+            perform(e.key, label: "Stopping…", success: "Stopped \(displayName(e)) :\(e.port)",
+                    undo: again.map { k in UndoAction(label: "Undo") { [weak self] in self?.start(k) } }) { try await Actions.kill(e) }
         }
     }
 
@@ -509,10 +526,10 @@ final class Store: ObservableObject {
         do { try Actions.tail(e) } catch { flash(error.localizedDescription) }
     }
 
-    private func perform(_ key: String, label: String, success: String, settle: Double = 0.6, _ work: @escaping () async throws -> Void) {
+    private func perform(_ key: String, label: String, success: String, undo: UndoAction? = nil, settle: Double = 0.6, _ work: @escaping () async throws -> Void) {
         busy[key] = label
         Task {
-            do { try await work(); flash(success) } catch { flash(error.localizedDescription) }
+            do { try await work(); flash(success, undo: undo) } catch { flash(error.localizedDescription) }
             try? await Task.sleep(for: .seconds(settle))
             await refresh()
             busy[key] = nil
@@ -584,7 +601,9 @@ final class Store: ObservableObject {
             try? await Task.sleep(for: .milliseconds(600))
             await refresh()
             for e in targets { busy[e.key] = nil }
-            flash(failed == 0 ? "Stopped everything in \(g.name)." : "\(failed) server\(failed == 1 ? "" : "s") could not be stopped.")
+            let back = targets.compactMap { known[$0.key] }.filter(\.canStart)
+            flash(failed == 0 ? "Stopped everything in \(g.name)." : "\(failed) server\(failed == 1 ? "" : "s") could not be stopped.",
+                  undo: back.isEmpty ? nil : UndoAction(label: "Undo") { [weak self] in self?.startServers(back) })
         }
     }
 
@@ -603,10 +622,11 @@ final class Store: ObservableObject {
     }
 
     /// Start everything that is stopped in this project, dependencies first, waiting for each tier to come up.
-    func startAll(_ g: ProjectGroup) {
-        let startable = g.stopped.filter(\.canStart)
+    func startAll(_ g: ProjectGroup) { startServers(g.stopped.filter(\.canStart)) }
+
+    func startServers(_ startable: [KnownServer]) {
         guard !startable.isEmpty else { return }
-        let levels = StartPlan.levels(startable: startable, pool: stopped)
+        let levels = StartPlan.levels(startable: startable, pool: stopped + startable)
         let plan = StartPlan.describe(levels)
         flash(levels.count > 1 ? "Starting in order: \(plan)" : "Starting \(plan)…")
         Task {

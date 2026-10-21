@@ -195,6 +195,53 @@ if CommandLine.arguments.contains("--drag-test") {
     exit(0)
 }
 
+// Debug helper: `Switchboard --undo-e2e` stops a real server through the Stop path, presses Undo, and checks it comes back.
+if CommandLine.arguments.contains("--undo-e2e") {
+    MainActor.assumeIsolated {
+        _ = NSApplication.shared
+        let dir = NSHomeDirectory() + "/Projects/_undotest"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try? "{\"name\":\"undotest\"}".write(toFile: dir + "/package.json", atomically: true, encoding: .utf8)
+        try? "require('http').createServer((q,r)=>r.end('ok')).listen(8721)".write(toFile: dir + "/s.js", atomically: true, encoding: .utf8)
+        let node = ["/opt/homebrew/bin/node", "/usr/local/bin/node"].first { FileManager.default.isExecutableFile(atPath: $0) } ?? "/usr/bin/env"
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: node)
+        p.arguments = node == "/usr/bin/env" ? ["node", "s.js"] : ["s.js"]
+        p.currentDirectoryURL = URL(fileURLWithPath: dir)
+        p.standardOutput = FileHandle.nullDevice; p.standardError = FileHandle.nullDevice
+        try! p.run()
+
+        func spin(until cond: () -> Bool, timeout: Double = 25) -> Bool {
+            let end = Date().addingTimeInterval(timeout)
+            while Date() < end { if cond() { return true }; RunLoop.current.run(until: Date().addingTimeInterval(0.1)) }
+            return cond()
+        }
+        let store = Store.shared
+        var listening: Bool { Probe.isListening(8721) }
+        _ = spin(until: { listening }, timeout: 6)
+        Task { await store.refresh() }
+        let seen = spin(until: { store.entries.contains { $0.port == 8721 } })
+        print("1. server seen by the app:", seen)
+        guard let entry = store.entries.first(where: { $0.port == 8721 }) else { exit(1) }
+
+        store.kill(entry)   // exactly what the Stop button does
+        let undoShown = spin(until: { store.undo != nil })
+        print("2. stopped, Undo bar shown:", undoShown, "| message:", store.message ?? "-", "| still listening:", listening)
+
+        store.runUndo()     // exactly what the Undo button does
+        let back = spin(until: { listening })
+        print("3. after Undo the server is listening again:", back)
+
+        // clean up
+        _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/pkill"), arguments: ["-f", "_undotest"])
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        if let k = store.stopped.first(where: { $0.port == 8721 }) { store.forget(k) }
+        try? FileManager.default.removeItem(atPath: dir)
+        try? FileManager.default.removeItem(atPath: NSHomeDirectory() + "/Library/Logs/Switchboard/_undotest-8721.log")
+    }
+    exit(0)
+}
+
 // Debug helper: `Switchboard --stack` prints who talks to whom.
 if CommandLine.arguments.contains("--stack") {
     let m = Scanner.stack(entries: Scanner.scan())
@@ -269,9 +316,9 @@ if let i = CommandLine.arguments.firstIndex(of: "--screenshot"), CommandLine.arg
                                         start: KnownStart(exec: "/usr/bin/true", argv: [], cwd: "/tmp"), containerID: nil, lastSeen: Date())
         // A sample stack for the map: three front ends call the API, the API uses Postgres and Redis, and a .env points at a port nobody listens on.
         func k(_ group: String, _ port: Int) -> String { "/Users/dev/\(group):\(port)" }
-        var nodes = list.map { StackNode(id: $0.key, role: .server, port: $0.port, title: $0.title, project: $0.projectName, status: $0.status, entryID: $0.id,
+        var nodes = list.map { StackNode(id: $0.key, role: .server, port: $0.port, title: $0.title, project: "billing", status: $0.status, entryID: $0.id,
                                          type: StackType.classify(title: $0.title, web: $0.web, isContainer: $0.container != nil)) }
-        nodes.append(StackNode(id: "client:1", role: .client, port: nil, title: "Queue worker", project: "billing-api", status: nil, entryID: nil, type: .worker))
+        nodes.append(StackNode(id: "client:1", role: .client, port: nil, title: "Queue worker", project: "billing", status: nil, entryID: nil, type: .worker))
         nodes.append(StackNode(id: "missing:9200", role: .missing, port: 9200, title: "Nothing here", project: nil, status: nil, entryID: nil, type: .missing))
         func edge(_ f: String, _ t: String, _ n: Int) -> StackEdge { StackEdge(from: f, to: t, count: n, hint: nil, configured: false, broken: false) }
         let sampleStack = StackMap(nodes: nodes, edges: [
@@ -285,6 +332,7 @@ if let i = CommandLine.arguments.firstIndex(of: "--screenshot"), CommandLine.arg
                                projectPath: "/Users/dev/dashboard", start: KnownStart(exec: "/usr/bin/true", argv: [], cwd: "/tmp"), containerID: nil, lastSeen: Date())
         let store = Store(sample: list, stopped: [stoppedServer, docs], names: ["/Users/dev/dashboard:3001": "Admin app"],
                           pinned: [], stack: sampleStack, showMap: CommandLine.arguments.contains("map"))
+        if CommandLine.arguments.contains("toast") { store.flash("Stopped Next.js :3000", undo: UndoAction(label: "Undo") {}) }
         _ = NSApplication.shared
         Theme.flat = true
         let look = NSAppearance(named: dark ? .darkAqua : .aqua)

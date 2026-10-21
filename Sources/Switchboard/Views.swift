@@ -114,13 +114,17 @@ struct RootView: View {
             .frame(height: listHeight)
             .overlay(alignment: .bottom) {
                 if let m = store.message {
-                    Text(m).font(.caption).foregroundStyle(.primary)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.12)))
-                        .padding(8)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    HStack(spacing: 10) {
+                        Text(m).font(.caption).foregroundStyle(.primary).frame(maxWidth: .infinity, alignment: .leading)
+                        if let u = store.undo { Button(u.label) { store.runUndo() }.buttonStyle(PillButton(tone: .quiet, width: 56)) }
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .background(Color(nsColor: .windowBackgroundColor).opacity(0.94), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.14)))
+                    .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+                    .padding(8)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .animation(Motion.anim, value: store.message)
@@ -279,19 +283,7 @@ struct GroupHeader: View {
                     .hoverTip("Start everything here, in order", tint: Brand.green)
             }
             Menu {
-                if let path = group.path {
-                    ForEach(Editors.installed, id: \.name) { ed in
-                        Button("Open in \(ed.name)") { store.openProject(path, in: ed.url) }
-                    }
-                    Button("Open Terminal here") { Editors.openTerminal(at: path) }
-                    Button("Show in Finder") { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
-                    Divider()
-                }
-                if group.path != nil { Button("Save stack file…") { store.saveStackFile(group) } }
-                if let p = group.path, store.projects.contains(p) { Button("Remove project") { store.removeProject(p) } }
-                if startable > 0 { Button(startable > 1 ? "Start stack in order (\(startable))" : "Start 1 stopped") { store.startAll(group) } }
-                if restartable > 0 { Button("Restart \(restartable) running") { store.restartAll(group) } }
-                if stoppable > 0 { Button("Stop all \(stoppable)…") { store.stopAll(group) } }
+                actions
             } label: {
                 Image(systemName: "ellipsis.circle").foregroundStyle(.secondary).frame(width: 24, height: 20).contentShape(Rectangle())
                     .hoverTip("Project actions", tint: Brand.primary)
@@ -301,6 +293,23 @@ struct GroupHeader: View {
         .padding(.horizontal, 12).padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(BandBackground())
+        .contextMenu { actions }
+    }
+
+    @ViewBuilder private var actions: some View {
+        if let path = group.path {
+            ForEach(Editors.installed, id: \.name) { ed in
+                Button("Open in \(ed.name)") { store.openProject(path, in: ed.url) }
+            }
+            Button("Open Terminal here") { Editors.openTerminal(at: path) }
+            Button("Show in Finder") { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
+            Divider()
+        }
+        if group.path != nil { Button("Save stack file…") { store.saveStackFile(group) } }
+        if let p = group.path, store.projects.contains(p) { Button("Remove project") { store.removeProject(p) } }
+        if startable > 0 { Button(startable > 1 ? "Start stack in order (\(startable))" : "Start 1 stopped") { store.startAll(group) } }
+        if restartable > 0 { Button("Restart \(restartable) running") { store.restartAll(group) } }
+        if stoppable > 0 { Button("Stop all \(stoppable)…") { store.stopAll(group) } }
     }
 }
 
@@ -386,6 +395,7 @@ struct RowView: View {
         .accessibilityAction(named: "Copy \(entry.address)") { store.copyLocal(entry) }
         .accessibilityAction(named: "Stop") { store.kill(entry) }
         .accessibilityAction(named: store.isPinned(entry.key) ? "Unpin" : "Pin") { store.togglePin(entry) }
+        .contextMenu { ServerMenu(entry: entry) }
     }
 
     @ViewBuilder private var health: some View {
@@ -532,6 +542,13 @@ struct StoppedRow: View {
         .accessibilityAction(named: "Start") { if server.canStart { store.start(server) } }
         .accessibilityAction(named: "Why did it stop") { store.explain(server) }
         .accessibilityAction(named: "Forget") { store.forget(server) }
+        .contextMenu {
+            if server.canStart { Button("Start") { store.start(server) } }
+            if server.stopReason != nil { Button("Why it stopped…") { store.explain(server) } }
+            Divider()
+            Button(store.isPinned(server.key) ? "Unpin" : "Pin to top") { store.togglePin(server) }
+            Button("Forget") { store.forget(server) }
+        }
     }
 }
 
@@ -586,5 +603,32 @@ struct IconButton: View {
         }
         .buttonStyle(.borderless)
         .hoverTip(help, tint: tint ?? Brand.primary)
+    }
+}
+
+/// The right-click menu for a running server, in the list and on the map.
+struct ServerMenu: View {
+    @EnvironmentObject var store: Store
+    let entry: PortEntry
+
+    var body: some View {
+        if entry.web == .page { Button("Open in browser") { store.open(entry) } }
+        Button(entry.copyLabel) { store.copyLocal(entry) }
+        Divider()
+        Button("Restart") { store.restart(entry) }.disabled(entry.container == nil && entry.restart == nil)
+        Button("Show logs in Terminal") { store.tail(entry) }
+        Button("Stop") { store.kill(entry) }
+        Divider()
+        Button(store.isPinned(entry.key) ? "Unpin" : "Pin to top") { store.togglePin(entry) }
+        Button("Rename…") { store.rename(entry) }
+        if entry.web != .none {
+            Button("Copy Wi-Fi link") { store.copyLAN(entry) }
+            Button("Show QR code for your phone…") { store.showQR(entry) }
+        }
+        if let path = entry.projectPath {
+            Divider()
+            ForEach(Editors.installed, id: \.name) { ed in Button("Open project in \(ed.name)") { store.openProject(path, in: ed.url) } }
+            Button("Open Terminal in project") { Editors.openTerminal(at: path) }
+        }
     }
 }
