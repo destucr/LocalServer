@@ -143,7 +143,9 @@ struct RootView: View {
     private var footer: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                if let hint = store.hoverHint {
+                if let tip = store.tip {
+                    Text(tip).font(.caption.weight(.medium)).foregroundStyle(.primary).lineLimit(1)
+                } else if let hint = store.hoverHint {
                     Text(hint).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 } else {
                     Text("\(store.count) running").font(.caption).foregroundStyle(.secondary)
@@ -262,7 +264,8 @@ struct GroupHeader: View {
                 if restartable > 0 { Button("Restart \(restartable) running") { store.restartAll(group) } }
                 if stoppable > 0 { Button("Stop all \(stoppable)…") { store.stopAll(group) } }
             } label: {
-                Image(systemName: "ellipsis.circle").foregroundStyle(.secondary).frame(width: 22, height: 18).contentShape(Rectangle())
+                Image(systemName: "ellipsis.circle").foregroundStyle(.secondary).frame(width: 24, height: 20).contentShape(Rectangle())
+                    .hoverTip("Project actions: open in editor, start, restart or stop everything", tint: Brand.primary)
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             .help(group.path.map { "Project actions for \(abbreviateHome($0))" } ?? "Group actions")
@@ -361,12 +364,14 @@ struct RowView: View {
         } else if entry.web == .page {
             Button { store.open(entry) } label: { Text("Open") }
                 .buttonStyle(PillButton(tone: .open))
+                .onHover { store.setTip($0 ? "Open \(entry.address) in your browser  (⌘O)" : nil) }
                 .help("Open \(entry.address) in your browser  (⌘O)")
         } else {
             Button { store.copyLocal(entry) } label: {
                 Text(copied ? "Copied ✓" : entry.copyLabel).animation(Motion.anim, value: copied)
             }
             .buttonStyle(PillButton(tone: copied ? .copied : .quiet))
+            .onHover { store.setTip($0 ? "Copy \(entry.address)  (⌘C)" : nil) }
             .help("Copy \(entry.address)  (⌘C)")
         }
     }
@@ -379,7 +384,7 @@ struct RowView: View {
             IconButton(symbol: "arrow.clockwise", help: canRestart ? "Restart with the same command  (⌘R)" : "Can't restart: LocalServer doesn't know how this was started")
                 { store.restart(entry) }
                 .disabled(!canRestart)
-            IconButton(symbol: "text.alignleft", help: "Follow the logs in Terminal  (⌘L)") { store.tail(entry) }
+            IconButton(symbol: "terminal", help: "Logs: follow the output in Terminal  (⌘L)") { store.tail(entry) }
             shareMenu
             IconButton(symbol: "stop.fill", help: "Stop this server  (⌘⌫)", tint: Brand.red) { store.kill(entry) }
             moreMenu
@@ -403,7 +408,8 @@ struct RowView: View {
                 Button("Get an internet link (needs cloudflared: brew install cloudflared)") { store.toggleTunnel(entry) }
             }
         } label: {
-            Image(systemName: "square.and.arrow.up").frame(width: 22, height: 22).contentShape(Rectangle())
+            Image(systemName: "square.and.arrow.up").frame(width: 24, height: 24).contentShape(Rectangle())
+                .hoverTip(entry.web == .none ? "Sharing needs a web server" : "Share: copy a link, show a QR code, or get an internet link", tint: Brand.primary)
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         .disabled(entry.web == .none)
@@ -421,7 +427,8 @@ struct RowView: View {
                 Button("Open Terminal in project") { Editors.openTerminal(at: path) }
             }
         } label: {
-            Image(systemName: "ellipsis").frame(width: 22, height: 22).contentShape(Rectangle())
+            Image(systemName: "ellipsis").frame(width: 24, height: 24).contentShape(Rectangle())
+                .hoverTip("More: pin, rename, open the project in your editor", tint: Brand.primary)
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         .help("More: pin, rename, open project")
@@ -455,6 +462,7 @@ struct StoppedRow: View {
                 if server.canStart {
                     Button { store.start(server) } label: { Text("Start") }
                         .buttonStyle(PillButton(tone: .start))
+                        .onHover { store.setTip($0 ? (server.containerID != nil ? "Start this container again  (⌘R)" : "Run it again in \(abbreviateHome(server.start?.cwd ?? ""))  (⌘R)") : nil) }
                         .help((server.containerID != nil ? "Start this container again" : "Run it again in \(abbreviateHome(server.start?.cwd ?? ""))") + "  (⌘R)")
                 } else {
                     Text("not running").font(.caption).foregroundStyle(.secondary)
@@ -485,6 +493,26 @@ struct TunnelLine: View {
     }
 }
 
+/// Hover feedback that does not depend on system tooltips (they often stay hidden in a menu bar popover):
+/// the button lights up and the footer says what it does.
+struct HoverTip: ViewModifier {
+    @EnvironmentObject var store: Store
+    let text: String
+    var tint: Color = .primary
+    @State private var hover = false
+
+    func body(content: Content) -> some View {
+        content
+            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hover ? tint.opacity(0.16) : .clear))
+            .onHover { hover = $0; store.setTip($0 ? text : nil) }
+            .onDisappear { if hover { store.setTip(nil) } }
+    }
+}
+
+extension View {
+    func hoverTip(_ text: String, tint: Color = .primary) -> some View { modifier(HoverTip(text: text, tint: tint)) }
+}
+
 struct IconButton: View {
     let symbol: String
     let help: String
@@ -494,10 +522,11 @@ struct IconButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol).frame(width: 22, height: 22).contentShape(Rectangle())
+            Image(systemName: symbol).frame(width: 24, height: 24).contentShape(Rectangle())
                 .foregroundStyle(tint ?? (enabled ? Color.primary : Color.secondary.opacity(0.5)))
         }
         .buttonStyle(.borderless)
+        .hoverTip(help, tint: tint ?? Brand.primary)
         .help(help)
     }
 }

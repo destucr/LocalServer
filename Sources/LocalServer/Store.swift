@@ -19,6 +19,7 @@ final class Store: ObservableObject {
     @Published var busy: [String: String] = [:]   // row key → what it is doing, e.g. "Restarting…"
     @Published var copiedID: String?
     @Published private(set) var hoverKey: String?
+    @Published private(set) var tip: String?   // what the hovered icon does, shown in the footer
     @Published private(set) var recent: Set<String> = []   // servers that just appeared
     private var knownRunningKeys: Set<String>?
     @Published var armedKill: String?
@@ -228,6 +229,8 @@ final class Store: ObservableObject {
     func setHover(_ key: String, _ on: Bool) {
         if on { hoverKey = key } else if hoverKey == key { hoverKey = nil }
     }
+
+    func setTip(_ text: String?) { if tip != text { tip = text } }
 
     /// Shown in the footer while the pointer is on a row.
     var hoverHint: String? {
