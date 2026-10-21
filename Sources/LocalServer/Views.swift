@@ -41,7 +41,7 @@ struct RootView: View {
             Divider()
             footer
         }
-        .frame(width: 440)
+        .frame(width: 470)
         .onReceive(NotificationCenter.default.publisher(for: .popoverDidShow)) { _ in
             store.query = ""
             filterFocused = true
@@ -196,7 +196,8 @@ struct RowView: View {
                 } else if hover {
                     secondaryActions
                 } else if let up = entry.uptime {
-                    Text(up).font(.caption).foregroundStyle(.tertiary).lineLimit(1).fixedSize()
+                    Text("up \(up)").font(.caption).foregroundStyle(.tertiary).lineLimit(1).fixedSize()
+                        .help("Running for \(up)")
                 }
                 mainButton
             }
@@ -210,15 +211,15 @@ struct RowView: View {
 
     @ViewBuilder private var mainButton: some View {
         if armed {
-            Button("Yes, stop") { store.kill(entry) }
+            Button { store.kill(entry) } label: { Text("Yes, stop").frame(width: 78) }
                 .controlSize(.small).buttonStyle(.borderedProminent).tint(.red)
         } else if entry.web == .page {
-            Button("Open") { store.open(entry) }
+            Button { store.open(entry) } label: { Text("Open").frame(width: 78) }
                 .controlSize(.small).buttonStyle(.bordered)
                 .help("Open \(entry.address) in your browser")
         } else {
             Button { store.copyLocal(entry) } label: {
-                Text(copied ? "Copied ✓" : entry.copyLabel).frame(minWidth: 70)
+                Text(copied ? "Copied ✓" : entry.copyLabel).frame(width: 78)
             }
             .controlSize(.small).buttonStyle(.bordered)
             .tint(copied ? .green : nil)
