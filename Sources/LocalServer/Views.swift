@@ -1,29 +1,35 @@
 import SwiftUI
 
+/// The app's own palette, taken from the icon: indigo for actions, mint for "running". Red is kept for danger.
+enum Brand {
+    private static func adaptive(_ light: NSColor, _ dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light })
+    }
+    static let primary = adaptive(NSColor(red: 0.31, green: 0.27, blue: 0.90, alpha: 1), NSColor(red: 0.42, green: 0.44, blue: 0.96, alpha: 1))
+    static let primaryText = adaptive(NSColor(red: 0.26, green: 0.22, blue: 0.80, alpha: 1), NSColor(red: 0.65, green: 0.67, blue: 0.99, alpha: 1))
+    static let mint = Color(red: 0.30, green: 0.84, blue: 0.52)
+    static let green = adaptive(NSColor(red: 0.08, green: 0.50, blue: 0.27, alpha: 1), NSColor(red: 0.16, green: 0.60, blue: 0.35, alpha: 1))
+    static let red = adaptive(NSColor(red: 0.82, green: 0.16, blue: 0.22, alpha: 1), NSColor(red: 0.90, green: 0.30, blue: 0.34, alpha: 1))
+}
+
 /// Color tells you what a button is for: blue is the main action, green brings something back, red stops something.
 enum Tone {
     case open, start, quiet, copied, stop
 
-    private static func adaptive(_ light: NSColor, _ dark: NSColor) -> Color {
-        Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light })
-    }
-    static let green = adaptive(NSColor(red: 0.10, green: 0.52, blue: 0.26, alpha: 1), NSColor(red: 0.20, green: 0.62, blue: 0.33, alpha: 1))
-    static let red = adaptive(NSColor(red: 0.82, green: 0.17, blue: 0.15, alpha: 1), NSColor(red: 0.86, green: 0.26, blue: 0.24, alpha: 1))
-
     var fill: Color {
         switch self {
-        case .open: return .accentColor
-        case .start: return Tone.green
-        case .stop: return Tone.red
-        case .quiet: return Color.accentColor.opacity(0.14)
-        case .copied: return Tone.green.opacity(0.18)
+        case .open: return Brand.primary
+        case .start: return Brand.green
+        case .stop: return Brand.red
+        case .quiet: return Brand.primary.opacity(0.14)
+        case .copied: return Brand.green.opacity(0.18)
         }
     }
     var text: Color {
         switch self {
         case .open, .start, .stop: return .white
-        case .quiet: return .accentColor
-        case .copied: return Tone.green
+        case .quiet: return Brand.primaryText
+        case .copied: return Brand.green
         }
     }
 }
@@ -50,10 +56,15 @@ enum Theme {
     static var matte: Color?
 }
 
-/// Project header bands: the system bar material, so rows blur underneath as they scroll past.
+/// Project header bands: translucent, so rows blur underneath as they scroll past.
 struct BandBackground: View {
     var body: some View {
-        if Theme.flat { Color.primary.opacity(0.07) } else { Rectangle().fill(.bar) }
+        if Theme.flat {
+            Color.primary.opacity(0.07)
+        } else {
+            // The thinnest material keeps the blur but stays see-through; the tint separates the band from the rows.
+            Rectangle().fill(.ultraThinMaterial).overlay(Color.primary.opacity(0.05))
+        }
     }
 }
 
@@ -92,10 +103,23 @@ struct RootView: View {
                 }
             }
             .frame(height: listHeight)
+            .overlay(alignment: .bottom) {
+                if let m = store.message {
+                    Text(m).font(.caption).foregroundStyle(.primary)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.12)))
+                        .padding(8)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(Motion.anim, value: store.message)
             Divider()
             footer
         }
         .frame(width: 470)
+        .tint(Brand.primary)
         .background { if let m = Theme.matte { Rectangle().fill(m) } }
         .onReceive(NotificationCenter.default.publisher(for: .popoverDidShow)) { _ in
             store.query = ""
@@ -118,18 +142,15 @@ struct RootView: View {
 
     private var footer: some View {
         VStack(spacing: 0) {
-            if let m = store.message {
-                Text(m).font(.caption).foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(BandBackground())
-                    .transition(.opacity)
-            }
             HStack(spacing: 10) {
-                Text("\(store.count) running").font(.caption).foregroundStyle(.secondary)
-                if !store.stopped.isEmpty {
-                    Button(store.showStopped ? "Hide stopped" : "Show \(store.stopped.count) stopped") { store.showStopped.toggle() }
-                        .buttonStyle(.plain).font(.caption).foregroundStyle(Color.accentColor)
+                if let hint = store.hoverHint {
+                    Text(hint).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                } else {
+                    Text("\(store.count) running").font(.caption).foregroundStyle(.secondary)
+                    if !store.stopped.isEmpty {
+                        Button(store.showStopped ? "Hide stopped" : "Show \(store.stopped.count) stopped") { store.showStopped.toggle() }
+                            .buttonStyle(.plain).font(.caption).foregroundStyle(Brand.primaryText)
+                    }
                 }
                 Spacer()
                 Menu {
@@ -150,7 +171,6 @@ struct RootView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 7)
         }
-        .animation(.default, value: store.message)
     }
 }
 
@@ -197,7 +217,7 @@ struct PortCard: View {
         let next = Ports.nextFree(after: port, taken: Set(store.entries.map(\.port)))
         HStack(spacing: 10) {
             Image(systemName: inUse ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-                .foregroundStyle(inUse ? .orange : .green).font(.title3)
+                .foregroundStyle(inUse ? Color.orange : Brand.green).font(.title3)
             VStack(alignment: .leading, spacing: 1) {
                 Text(inUse ? "Port \(String(port)) is in use" : "Port \(String(port)) is free").font(.system(size: 13, weight: .semibold))
                 Text(!inUse ? "Go ahead and start your server"
@@ -212,7 +232,7 @@ struct PortCard: View {
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background((inUse ? Color.orange : Color.green).opacity(0.12))
+        .background((inUse ? Color.orange : Brand.green).opacity(0.12))
     }
 }
 
@@ -271,7 +291,7 @@ struct RowView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Circle().fill(.green).frame(width: 7, height: 7)
+            Circle().fill(Brand.mint).frame(width: 7, height: 7)
             Text(String(entry.port))
                 .font(.system(size: 15, weight: .semibold)).monospacedDigit()
                 .frame(width: 58, alignment: .leading)
@@ -319,8 +339,8 @@ struct RowView: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
         .frame(height: 44)
-        .background(store.recent.contains(entry.key) ? Color.green.opacity(0.18) : (hover ? Color.primary.opacity(0.07) : .clear))
-        .onHover { hover = $0 }
+        .background(store.recent.contains(entry.key) ? Brand.mint.opacity(0.20) : (hover ? Color.primary.opacity(0.07) : .clear))
+        .onHover { hover = $0; store.setHover(entry.key, $0) }
         .help("PID \(entry.pid.map(String.init) ?? "-")  \(entry.command)")
     }
 
@@ -341,24 +361,27 @@ struct RowView: View {
         } else if entry.web == .page {
             Button { store.open(entry) } label: { Text("Open") }
                 .buttonStyle(PillButton(tone: .open))
-                .help("Open \(entry.address) in your browser")
+                .help("Open \(entry.address) in your browser  (⌘O)")
         } else {
             Button { store.copyLocal(entry) } label: {
                 Text(copied ? "Copied ✓" : entry.copyLabel).animation(Motion.anim, value: copied)
             }
             .buttonStyle(PillButton(tone: copied ? .copied : .quiet))
-            .help("Copy \(entry.address)")
+            .help("Copy \(entry.address)  (⌘C)")
         }
     }
 
     private var secondaryActions: some View {
         HStack(spacing: 0) {
-            IconButton(symbol: "arrow.clockwise", help: canRestart ? "Restart with the same command" : "Can't restart: LocalServer doesn't know how this was started")
+            if entry.web == .page {
+                IconButton(symbol: "doc.on.doc", help: "Copy \(entry.address)  (⌘C)") { store.copyLocal(entry) }
+            }
+            IconButton(symbol: "arrow.clockwise", help: canRestart ? "Restart with the same command  (⌘R)" : "Can't restart: LocalServer doesn't know how this was started")
                 { store.restart(entry) }
                 .disabled(!canRestart)
-            IconButton(symbol: "text.alignleft", help: "Follow the logs in Terminal") { store.tail(entry) }
+            IconButton(symbol: "text.alignleft", help: "Follow the logs in Terminal  (⌘L)") { store.tail(entry) }
             shareMenu
-            IconButton(symbol: "stop.fill", help: "Stop this server", tint: Tone.red) { store.kill(entry) }
+            IconButton(symbol: "stop.fill", help: "Stop this server  (⌘⌫)", tint: Brand.red) { store.kill(entry) }
             moreMenu
         }
     }
@@ -389,7 +412,7 @@ struct RowView: View {
 
     private var moreMenu: some View {
         Menu {
-            Button(store.isPinned(entry.key) ? "Unpin" : "Pin to top") { store.togglePin(entry) }
+            Button(store.isPinned(entry.key) ? "Unpin  (⌘P)" : "Pin to top  (⌘P)") { store.togglePin(entry) }
             Button("Rename…") { store.rename(entry) }
             if entry.web == .api { Button("Open \(entry.address) in browser") { store.open(entry) } }
             if let path = entry.projectPath {
@@ -427,12 +450,12 @@ struct StoppedRow: View {
             } else {
                 if hover {
                     IconButton(symbol: store.isPinned(server.key) ? "pin.slash" : "pin", help: store.isPinned(server.key) ? "Unpin" : "Pin to top") { store.togglePin(server) }
-                    IconButton(symbol: "xmark", help: "Forget this server") { store.forget(server) }
+                    IconButton(symbol: "xmark", help: "Forget this server  (⌘⌫)") { store.forget(server) }
                 }
                 if server.canStart {
                     Button { store.start(server) } label: { Text("Start") }
                         .buttonStyle(PillButton(tone: .start))
-                        .help(server.containerID != nil ? "Start this container again" : "Run it again in \(abbreviateHome(server.start?.cwd ?? ""))")
+                        .help((server.containerID != nil ? "Start this container again" : "Run it again in \(abbreviateHome(server.start?.cwd ?? ""))") + "  (⌘R)")
                 } else {
                     Text("not running").font(.caption).foregroundStyle(.secondary)
                 }
@@ -441,7 +464,7 @@ struct StoppedRow: View {
         .padding(.horizontal, 12).padding(.vertical, 5)
         .frame(height: 44)
         .background(hover ? Color.primary.opacity(0.07) : .clear)
-        .onHover { hover = $0 }
+        .onHover { hover = $0; store.setHover(server.key, $0) }
     }
 }
 
@@ -458,7 +481,7 @@ struct TunnelLine: View {
             case .failed(let why): Text("Public link failed (\(why))")
             }
         }
-        .font(.caption).foregroundStyle(Color.accentColor).lineLimit(1)
+        .font(.caption).foregroundStyle(Brand.primaryText).lineLimit(1)
     }
 }
 

@@ -18,6 +18,7 @@ final class Store: ObservableObject {
     @Published var message: String?
     @Published var busy: [String: String] = [:]   // row key → what it is doing, e.g. "Restarting…"
     @Published var copiedID: String?
+    @Published private(set) var hoverKey: String?
     @Published private(set) var recent: Set<String> = []   // servers that just appeared
     private var knownRunningKeys: Set<String>?
     @Published var armedKill: String?
@@ -220,6 +221,49 @@ final class Store: ObservableObject {
             try? await Task.sleep(for: .seconds(4))
             if !Task.isCancelled { self?.message = nil }
         }
+    }
+
+    // MARK: Hover and shortcuts
+
+    func setHover(_ key: String, _ on: Bool) {
+        if on { hoverKey = key } else if hoverKey == key { hoverKey = nil }
+    }
+
+    /// Shown in the footer while the pointer is on a row.
+    var hoverHint: String? {
+        guard let key = hoverKey else { return nil }
+        if let e = entries.first(where: { $0.key == key }) {
+            return e.web == .page ? "⌘O open · ⌘C copy · ⌘R restart · ⌘L logs · ⌘⌫ stop"
+                                  : "⌘C copy · ⌘R restart · ⌘L logs · ⌘⌫ stop"
+        }
+        return stopped.contains { $0.key == key } ? "⌘R start · ⌘⌫ forget" : nil
+    }
+
+    /// ⌘ shortcuts act on the row under the pointer. Returns true if one was handled.
+    func shortcut(_ ch: String, deleteKey: Bool) -> Bool {
+        guard let key = hoverKey else { return false }
+        if let e = entries.first(where: { $0.key == key }) {
+            if deleteKey { kill(e); return true }
+            switch ch {
+            case "o": e.web == .none ? copyLocal(e) : open(e)
+            case "c": copyLocal(e)
+            case "r": if e.container != nil || e.restart != nil { restart(e) } else { flash("LocalServer can't restart this one. It doesn't know how it was started.") }
+            case "l": tail(e)
+            case "p": togglePin(e)
+            default: return false
+            }
+            return true
+        }
+        if let k = stopped.first(where: { $0.key == key }) {
+            if deleteKey { forget(k); return true }
+            switch ch {
+            case "r", "s": if k.canStart { start(k) }
+            case "p": togglePin(k)
+            default: return false
+            }
+            return true
+        }
+        return false
     }
 
     // MARK: Row actions

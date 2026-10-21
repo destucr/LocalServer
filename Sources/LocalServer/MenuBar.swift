@@ -41,10 +41,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         popover.behavior = .transient
         popover.animates = false
-        popover.contentViewController = NSHostingController(rootView: RootView().environmentObject(store))
+        // An explicit vibrancy view, so the blur does not depend on popover defaults.
+        let host = NSHostingController(rootView: RootView().environmentObject(store))
+        host.sizingOptions = []
+        let effect = NSVisualEffectView()
+        effect.material = .popover
+        effect.blendingMode = .behindWindow
+        effect.state = .active
+        let vc = NSViewController()
+        vc.view = effect
+        vc.addChild(host)
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        effect.addSubview(host.view)
+        NSLayoutConstraint.activate([
+            host.view.leadingAnchor.constraint(equalTo: effect.leadingAnchor), host.view.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+            host.view.topAnchor.constraint(equalTo: effect.topAnchor), host.view.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+        ])
+        popover.contentSize = NSHostingView(rootView: RootView().environmentObject(store)).fittingSize
+        popover.contentViewController = vc
 
         store.$entries.receive(on: RunLoop.main).sink { [weak self] _ in self?.updateTitle() }.store(in: &bag)
         updateTitle()
+
+        if CommandLine.arguments.contains("--show") {   // debug: open the popover at launch
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in self?.toggle() }
+        }
+
+        // ⌘O / ⌘C / ⌘R / ⌘L / ⌘⌫ act on the row under the pointer.
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] ev in
+            guard let self, self.popover.isShown,
+                  ev.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command else { return ev }
+            if let tv = self.popover.contentViewController?.view.window?.firstResponder as? NSTextView, tv.selectedRange().length > 0 {
+                return ev   // let ⌘C copy selected text in the filter box
+            }
+            let ch = ev.charactersIgnoringModifiers?.lowercased() ?? ""
+            let handled = MainActor.assumeIsolated { self.store.shortcut(ch, deleteKey: ev.keyCode == 51) }
+            return handled ? nil : ev
+        }
 
         hotKey = HotKey(keyCode: kVK_ANSI_P, modifiers: controlKey | optionKey) { [weak self] in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.toggle() } }
