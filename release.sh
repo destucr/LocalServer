@@ -13,4 +13,13 @@ git commit -qam "Release $V"
 git tag "v$V"
 git push -q origin HEAD "v$V"
 gh release create "v$V" "build/LocalServer-$V.zip" --title "LocalServer $V" --generate-notes
+
+# Update the Homebrew cask (destucr/homebrew-tap) with the new version + checksum
+SHA="$(shasum -a 256 "build/LocalServer-$V.zip" | cut -d' ' -f1)"
+CASK="Casks/localserver.rb"
+CUR="$(gh api "repos/destucr/homebrew-tap/contents/$CASK")"
+FILE_SHA="$(echo "$CUR" | jq -r .sha)"
+NEW="$(echo "$CUR" | jq -r .content | base64 -d | sed -E "s/^(  version \").*(\")/\1$V\2/; s/^(  sha256 \").*(\")/\1$SHA\2/")"
+gh api -X PUT "repos/destucr/homebrew-tap/contents/$CASK" -f message="localserver $V" \
+  -f content="$(echo "$NEW" | base64)" -f sha="$FILE_SHA" -f branch=main --jq .commit.html_url
 echo "Released v$V"

@@ -18,7 +18,15 @@ A macOS menu bar app that shows every local port — Vite, Laravel, Next.js, Doc
 - Orange wifi icon = listening on all interfaces (reachable from your network).
 - System daemons and apps (ControlCenter, Raycast…) are hidden unless enabled in the gear menu.
 
-## Build & install
+## Install
+
+```sh
+brew install --cask destucr/tap/localserver
+```
+
+Or download the zip from [Releases](https://github.com/destucr/LocalServer/releases) (ad-hoc signed: right-click → Open the first time).
+
+## Build from source
 
 Requires macOS 14+ and the Swift toolchain (Xcode or Command Line Tools).
 
