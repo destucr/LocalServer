@@ -88,6 +88,8 @@ struct KnownServer: Codable, Hashable, Identifiable {
     var stoppedAt: Date? = nil
     var id: String { key }
     var canStart: Bool { start != nil || containerID != nil }
+    /// Started from a folder that has since been deleted or moved, so it can never start again.
+    var folderMissing: Bool { containerID == nil && start.map { !FileManager.default.fileExists(atPath: $0.cwd) } == true }
 }
 
 struct ProjectGroup: Identifiable {

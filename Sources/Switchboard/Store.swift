@@ -584,6 +584,10 @@ final class Store: ObservableObject {
     }
 
     func start(_ k: KnownServer) {
+        if k.folderMissing, let cwd = k.start?.cwd {
+            if Dialogs.confirm("\(k.title) can't start", "Its folder \(abbreviateHome(cwd)) was deleted or moved, so there is nothing to start. Remove it from the list?", ok: "Forget it") { forget(k) }
+            return
+        }
         if let who = holder(of: k) {
             guard k.containerID == nil, k.start != nil else {
                 flash("Port \(k.port) is in use by \(who), and this one can't move to another port. Stop \(who) first.")

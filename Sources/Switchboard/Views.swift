@@ -517,6 +517,7 @@ struct StoppedRow: View {
     private var active: Bool { store.keyboardMode ? store.selectedKey == server.key : hover }
 
     private var stoppedLine: String {
+        if server.folderMissing { return "its folder was deleted or moved" }
         guard let reason = server.stopReason else { return "stopped" }
         let ago = server.stoppedAt.map { formatDuration(Int(Date().timeIntervalSince($0))) + " ago · " } ?? ""
         return "stopped \(ago)\(reason)"
@@ -547,7 +548,11 @@ struct StoppedRow: View {
                     IconButton(symbol: store.isPinned(server.key) ? "pin.slash" : "pin", help: store.isPinned(server.key) ? "Unpin" : "Pin to top") { store.togglePin(server) }
                     IconButton(symbol: "xmark", help: "Forget  (⌘⌫)") { store.forget(server) }
                 }
-                if server.canStart {
+                if server.folderMissing {
+                    Button { store.forget(server) } label: { Text("Forget") }
+                        .buttonStyle(PillButton(tone: .quiet))
+                        .hoverTip("Remove it from the list. Its folder is gone, so it can't start.", tint: Brand.primary)
+                } else if server.canStart {
                     Button { store.start(server) } label: { Text("Start") }
                         .buttonStyle(PillButton(tone: .start))
                         .hoverTip("Start  (⌘R)", tint: Brand.green)
