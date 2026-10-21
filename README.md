@@ -32,13 +32,10 @@ After changing code, run `./build.sh install` again — it stops the running app
 
 ### Versioning
 
-The version lives in the `VERSION` file and is stamped into the app (shown in the gear menu → About). To cut a release:
+The version lives in the `VERSION` file and is stamped into the app (shown in the gear menu → About). To cut a release, commit your changes, then:
 
 ```sh
-echo 1.1.0 > VERSION && git commit -am "Release 1.1.0"
-git tag v1.1.0 && git push --tags
-./build.sh release        # build/LocalServer-1.1.0.zip
-gh release create v1.1.0 build/LocalServer-1.1.0.zip --generate-notes
+./release.sh 1.1.0   # bumps VERSION, builds, tags, pushes, publishes the GitHub release
 ```
 
 "Launch at login" only works once the app is in `/Applications`. The app is ad-hoc signed and not sandboxed — it needs to inspect and signal your processes.
