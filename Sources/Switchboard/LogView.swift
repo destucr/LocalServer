@@ -203,7 +203,7 @@ struct LogView: View {
         HStack(spacing: 8) {
             IconButton(symbol: "chevron.left", help: "Back  (esc)") { store.closeLogs() }
             Text(tail.title).font(.system(size: 13, weight: .semibold)).lineLimit(1).truncationMode(.middle)
-                .frame(maxWidth: 150, alignment: .leading)
+                .frame(maxWidth: 120, alignment: .leading)
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
             TextField("Filter logs", text: $tail.query).textFieldStyle(.plain)
             IconButton(symbol: tail.follow ? "arrow.down.to.line.compact" : "pause", help: tail.follow ? "Following new lines. Click to pause." : "Paused. Click to follow.", tint: tail.follow ? Brand.green : nil) {
@@ -260,15 +260,11 @@ struct LogView: View {
     }
 }
 
-/// The terminal button. The first time it asks which terminal to use. After that a click opens the one you picked,
-/// and holding the button shows the list again to change it.
+/// The terminal button. The first time it asks which terminal to use. After that it shows that terminal's icon,
+/// a click opens it, and the small arrow beside it changes the choice.
 struct TerminalMenu: View {
     @EnvironmentObject var store: Store
     let open: (TerminalApp) -> Void
-
-    private var label: some View {
-        Image(systemName: "terminal").frame(width: 24, height: 24).contentShape(Rectangle())
-    }
 
     private var choices: some View {
         ForEach(TerminalApp.installed) { app in
@@ -278,16 +274,32 @@ struct TerminalMenu: View {
         }
     }
 
-    var body: some View {
-        Group {
-            if store.hasLogTerminal {
-                Menu { choices } label: { label } primaryAction: { open(store.logTerminal) }
-                    .hoverTip("Open in \(store.logTerminal.name). Hold to change.", tint: Brand.primary)
-            } else {
-                Menu { choices } label: { label }
-                    .hoverTip("Open in a terminal", tint: Brand.primary)
-            }
+    private func arrow(_ help: String) -> some View {
+        Menu { choices } label: {
+            Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)).foregroundStyle(.secondary)
+                .frame(width: 12, height: 24).contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+        .hoverTip(help, tint: Brand.primary)
+    }
+
+    var body: some View {
+        if store.hasLogTerminal {
+            let app = store.logTerminal
+            HStack(spacing: 0) {
+                Button { open(app) } label: {
+                    Image(nsImage: app.icon).resizable().frame(width: 16, height: 16).frame(width: 24, height: 24).contentShape(Rectangle())
+                }
+                .buttonStyle(PressStyle())
+                .hoverTip("Open in \(app.name)", tint: Brand.primary)
+                arrow("Use another terminal")
+            }
+        } else {
+            HStack(spacing: 0) {
+                Image(systemName: "terminal").frame(width: 24, height: 24)
+                    .overlay { Color.clear.contentShape(Rectangle()) }
+                arrow("Choose a terminal to open this log in")
+            }
+        }
     }
 }

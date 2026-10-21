@@ -18,6 +18,9 @@ struct TerminalApp: Identifiable, Hashable {
     static var installed: [TerminalApp] { all.filter { $0.url != nil } }
     static let fallback = all[0]
 
+    /// The app's own icon, so the button looks like the terminal it opens.
+    var icon: NSImage { url.map { NSWorkspace.shared.icon(forFile: $0.path) } ?? NSImage() }
+
     var url: URL? { NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) }
 
     /// Runs an executable script in this terminal. Returns false if the app could not be started.
