@@ -5,7 +5,12 @@ All notable changes to Switchboard. The format follows [Keep a Changelog](https:
 ## [Unreleased]
 
 ### Added
-- Logs open inside Switchboard instead of a new Terminal window. They follow new lines, can be filtered, copied and cleared, and work for Docker containers too. A terminal button lets you send the log to Terminal, iTerm, Ghostty, Warp, kitty, Alacritty or WezTerm (whichever are installed), and remembers your pick, so the button then shows that terminal's icon and opens it in one click. Sessions already open in tmux or zellij are listed too, and the log opens there as a new window or pane.
+- Logs open inside Switchboard instead of a new Terminal window. They follow new lines, can be filtered, copied and cleared, and work for Docker containers too.
+- A terminal button sends the log to Terminal, iTerm, Ghostty, Warp, kitty, Alacritty or WezTerm, whichever are installed. It remembers your pick, shows that terminal's icon and opens it in one click. "Terminal for logs" in the settings menu changes it.
+- Sessions already open in tmux or zellij are listed too. The log opens there as a new window or pane.
+
+### Fixed
+- A tooltip no longer covers a menu you just opened.
 
 ## [1.6.0] - 2026-10-21
 
