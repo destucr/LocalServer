@@ -15,6 +15,7 @@ final class Store: ObservableObject {
     @Published private(set) var stopped: [KnownServer] = []
     @Published var query = ""
     @Published private(set) var stack = StackMap.empty
+    @Published private(set) var mapOffsets: [String: CGSize] = [:]   // where you dragged map nodes
     @Published var showMap: Bool { didSet { UserDefaults.standard.set(showMap, forKey: "showMap"); if showMap { Task { await refresh() } } } }
     @Published var showAll = false
     @Published var message: String?
@@ -68,6 +69,7 @@ final class Store: ObservableObject {
         persistent = true
         let d = UserDefaults.standard
         showMap = d.bool(forKey: "showMap")
+        mapOffsets = (d.dictionary(forKey: "mapOffsets") as? [String: [Double]] ?? [:]).compactMapValues { $0.count == 2 ? CGSize(width: $0[0], height: $0[1]) : nil }
         showStopped = d.bool(forKey: "showStopped")
         notifyOnStop = d.object(forKey: "notifyOnStop") as? Bool ?? true
         load()
@@ -288,6 +290,18 @@ final class Store: ObservableObject {
     func refreshBackdrop(screen: NSScreen?, dark: Bool) {
         let t = Backdrop.tint(screen: screen, dark: dark)
         if abs(t - backdropTint) > 0.005 { backdropTint = t }
+    }
+
+    // MARK: Map layout
+
+    func setMapOffset(_ id: String, _ size: CGSize) {
+        mapOffsets[id] = size
+        UserDefaults.standard.set(mapOffsets.mapValues { [Double($0.width), Double($0.height)] }, forKey: "mapOffsets")
+    }
+
+    func resetMapLayout() {
+        mapOffsets = [:]
+        UserDefaults.standard.removeObject(forKey: "mapOffsets")
     }
 
     // MARK: Hover and shortcuts

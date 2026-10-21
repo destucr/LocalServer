@@ -1,5 +1,58 @@
 import Foundation
 
+/// What kind of thing a server is, so the map can draw it like an architecture diagram.
+enum StackType: String, Hashable {
+    case web, api, database, cache, search, mail, storage, worker, container, missing, server
+
+    var symbol: String {
+        switch self {
+        case .web: return "globe"
+        case .api: return "curlybraces"
+        case .database: return "cylinder.split.1x2.fill"
+        case .cache: return "bolt.fill"
+        case .search: return "magnifyingglass"
+        case .mail: return "envelope.fill"
+        case .storage: return "externaldrive.fill"
+        case .worker: return "gearshape.2.fill"
+        case .container: return "shippingbox.fill"
+        case .missing: return "questionmark"
+        case .server: return "server.rack"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .web: return "Web app"
+        case .api: return "API"
+        case .database: return "Database"
+        case .cache: return "Cache"
+        case .search: return "Search"
+        case .mail: return "Mail"
+        case .storage: return "Storage"
+        case .worker: return "Worker"
+        case .container: return "Container"
+        case .missing: return "Not running"
+        case .server: return "Server"
+        }
+    }
+
+    static func classify(title: String, web: WebKind, isContainer: Bool, image: String? = nil) -> StackType {
+        let t = (title + " " + (image ?? "")).lowercased()
+        func has(_ words: [String]) -> Bool { words.contains { t.contains($0) } }
+        if has(["postgres", "mysql", "mariadb", "mongo", "clickhouse", "cockroach", "influx", "sqlite"]) { return .database }
+        if has(["redis", "valkey", "memcached"]) { return .cache }
+        if has(["elasticsearch", "opensearch", "meilisearch", "typesense", "qdrant"]) { return .search }
+        if has(["mailpit", "mailhog", "mailcatcher"]) { return .mail }
+        if has(["minio"]) { return .storage }
+        if isContainer { return .container }
+        switch web {
+        case .page: return .web
+        case .api: return .api
+        case .none: return .server
+        }
+    }
+}
+
 /// The running stack as a graph: who talks to whom.
 struct StackNode: Identifiable, Hashable {
     enum Role { case server, client, missing }
@@ -10,6 +63,7 @@ struct StackNode: Identifiable, Hashable {
     var project: String?
     var status: Int?        // HTTP status of GET /, when known
     var entryID: String?    // PortEntry.id, so the map can act on it
+    var type: StackType = .server
 }
 
 struct StackEdge: Hashable {
@@ -61,7 +115,8 @@ extension Scanner {
 
         var nodes: [String: StackNode] = [:]
         for e in servers {
-            nodes[e.key] = StackNode(id: e.key, role: .server, port: e.port, title: e.title, project: e.projectName, status: e.status, entryID: e.id)
+            nodes[e.key] = StackNode(id: e.key, role: .server, port: e.port, title: e.title, project: e.projectName, status: e.status, entryID: e.id,
+                                     type: StackType.classify(title: e.title, web: e.web, isContainer: e.container != nil, image: e.container?.image))
         }
 
         var counts: [String: [String: Int]] = [:]   // from → to → n
@@ -74,7 +129,7 @@ extension Scanner {
             var key: String?
             if d.kind == .dev, d.projectName != nil {   // a worker or script from one of your projects; not a browser or system app
                 key = "client:\(pid)"
-                nodes[key!] = StackNode(id: key!, role: .client, port: nil, title: d.title, project: d.projectName, status: nil, entryID: nil)
+                nodes[key!] = StackNode(id: key!, role: .client, port: nil, title: d.title, project: d.projectName, status: nil, entryID: nil, type: .worker)
             }
             clientCache[pid] = key
             return key
@@ -102,7 +157,7 @@ extension Scanner {
                     }
                 } else {
                     let id = "missing:\(hint.port)"
-                    nodes[id] = StackNode(id: id, role: .missing, port: hint.port, title: "Nothing here", project: nil, status: nil, entryID: nil)
+                    nodes[id] = StackNode(id: id, role: .missing, port: hint.port, title: "Nothing here", project: nil, status: nil, entryID: nil, type: .missing)
                     edges.append(StackEdge(from: owner.key, to: id, count: 0, hint: hint.label, configured: true, broken: true))
                 }
             }

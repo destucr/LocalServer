@@ -1,11 +1,33 @@
 import SwiftUI
 
-/// The running stack drawn as connected nodes: sources on the left, what they depend on to the right.
+/// Colors for the tile behind each server type, in the style of an architecture diagram. All hold white icons at 3:1 or better.
+extension StackType {
+    var tileColor: Color {
+        switch self {
+        case .web: return Color(red: 0.31, green: 0.27, blue: 0.90)
+        case .api: return Color(red: 0.55, green: 0.28, blue: 0.86)
+        case .database: return Color(red: 0.12, green: 0.42, blue: 0.82)
+        case .cache: return Color(red: 0.84, green: 0.30, blue: 0.25)
+        case .search: return Color(red: 0.72, green: 0.45, blue: 0.05)
+        case .mail: return Color(red: 0.08, green: 0.52, blue: 0.56)
+        case .storage: return Color(red: 0.36, green: 0.43, blue: 0.54)
+        case .worker: return Color(red: 0.78, green: 0.27, blue: 0.50)
+        case .container: return Color(red: 0.05, green: 0.50, blue: 0.74)
+        case .server: return Color(red: 0.36, green: 0.40, blue: 0.48)
+        case .missing: return .clear
+        }
+    }
+}
+
+/// The running stack drawn like an architecture diagram: sources on the left, what they depend on to the right.
+/// Drag a node to move it; the position is remembered.
 struct StackMapView: View {
     @EnvironmentObject var store: Store
     @State private var selected: String?
+    @State private var dragging: [String: CGSize] = [:]
 
-    private let stripHeight: CGFloat = 44
+    private let stripHeight: CGFloat = 78
+    private let tile: CGFloat = 40
 
     var body: some View {
         let map = store.stack
@@ -20,19 +42,43 @@ struct StackMapView: View {
         } else {
             GeometryReader { geo in
                 let layout = Layout(map: map, size: geo.size, stripHeight: stripHeight)
+                let points = layout.point.reduce(into: [String: CGPoint]()) { out, kv in
+                    let off = dragging[kv.key] ?? store.mapOffsets[kv.key] ?? .zero
+                    out[kv.key] = CGPoint(x: min(max(kv.value.x + off.width, 40), geo.size.width - 40),
+                                          y: min(max(kv.value.y + off.height, 34), geo.size.height - 54))
+                }
                 ZStack(alignment: .topLeading) {
                     Canvas { ctx, _ in
-                        for e in map.edges { draw(edge: e, in: &ctx, layout: layout, map: map) }
+                        for e in map.edges { draw(edge: e, in: &ctx, points: points, map: map) }
                     }
                     ForEach(map.nodes) { n in
-                        if let p = layout.point[n.id] {
-                            NodeView(node: n, map: map, selected: selected == n.id, dimmed: dimmed(n, map), width: layout.nodeW)
-                                .position(p)
+                        if let p = points[n.id] {
+                            NodeView(node: n, map: map, selected: selected == n.id, dimmed: dimmed(n, map), width: layout.nodeW, tile: tile)
+                                .position(x: p.x, y: p.y + 17)
                                 .onTapGesture { selected = selected == n.id ? nil : n.id }
+                                .gesture(
+                                    DragGesture(minimumDistance: 4, coordinateSpace: .named("map"))
+                                        .onChanged { v in
+                                            let base = store.mapOffsets[n.id] ?? .zero
+                                            dragging[n.id] = CGSize(width: base.width + v.translation.width, height: base.height + v.translation.height)
+                                        }
+                                        .onEnded { _ in
+                                            if let d = dragging[n.id] { store.setMapOffset(n.id, d) }
+                                            dragging[n.id] = nil
+                                        }
+                                )
                         }
                     }
                     if !layout.isolated.isEmpty {
-                        Text("Not connected").font(.caption).foregroundStyle(.secondary).position(x: 56, y: geo.size.height - stripHeight - 6)
+                        Text("Not connected").font(.caption).foregroundStyle(.secondary).position(x: 56, y: geo.size.height - stripHeight - 4)
+                    }
+                }
+                .coordinateSpace(name: "map")
+                .overlay(alignment: .topTrailing) {
+                    if !store.mapOffsets.isEmpty {
+                        Button("Reset layout") { withAnimation(Motion.anim) { store.resetMapLayout() } }
+                            .buttonStyle(PillButton(tone: .quiet, width: 92)).padding(8)
+                            .hoverTip("Put nodes back", tint: Brand.primary)
                     }
                 }
                 .overlay(alignment: .bottom) { if let id = selected, let n = map.node(id) { DetailCard(node: n, map: map, close: { selected = nil }) } }
@@ -47,17 +93,17 @@ struct StackMapView: View {
         return !map.edges.contains { ($0.from == s && $0.to == n.id) || ($0.to == s && $0.from == n.id) }
     }
 
-    private func draw(edge e: StackEdge, in ctx: inout GraphicsContext, layout: Layout, map: StackMap) {
-        guard let a = layout.point[e.from], let b = layout.point[e.to] else { return }
-        let w = layout.nodeW / 2
-        let forward = b.x > a.x
-        let start = CGPoint(x: forward ? a.x + w : a.x, y: forward ? a.y : a.y + 20)
-        let end = CGPoint(x: forward ? b.x - w : b.x, y: forward ? b.y : b.y + 20)
+    private func draw(edge e: StackEdge, in ctx: inout GraphicsContext, points: [String: CGPoint], map: StackMap) {
+        guard let a = points[e.from], let b = points[e.to] else { return }
+        let half = tile / 2 + 3
+        let forward = b.x > a.x + 20
+        let start = forward ? CGPoint(x: a.x + half, y: a.y) : CGPoint(x: a.x, y: a.y + half)
+        let end = forward ? CGPoint(x: b.x - half - 3, y: b.y) : CGPoint(x: b.x, y: b.y + half + 3)
         var path = Path()
         path.move(to: start)
         let dx = max(abs(end.x - start.x) * 0.5, 24)
-        let c1 = CGPoint(x: start.x + (forward ? dx : 0), y: start.y + (forward ? 0 : 36))
-        let c2 = CGPoint(x: end.x - (forward ? dx : 0), y: end.y + (forward ? 0 : 36))
+        let c1 = CGPoint(x: start.x + (forward ? dx : 0), y: start.y + (forward ? 0 : 40))
+        let c2 = CGPoint(x: end.x - (forward ? dx : 0), y: end.y + (forward ? 0 : 40))
         path.addCurve(to: end, control1: c1, control2: c2)
 
         let target = map.node(e.to)
@@ -67,7 +113,6 @@ struct StackMapView: View {
         let style = StrokeStyle(lineWidth: e.configured ? 1.3 : 1.8, lineCap: .round, dash: e.configured ? [4, 4] : [])
         ctx.stroke(path, with: .color(color.opacity(involved ? (e.configured ? 0.75 : 0.85) : 0.18)), style: style)
 
-        // arrowhead
         let ang = atan2(end.y - c2.y, end.x - c2.x)
         var head = Path()
         head.move(to: end)
@@ -77,11 +122,11 @@ struct StackMapView: View {
         ctx.fill(head, with: .color(color.opacity(involved ? 0.9 : 0.2)))
     }
 
-    /// Columns by dependency depth; rows ordered by project, then port. Servers with no links sit in a strip at the bottom.
+    /// Columns by dependency depth, rows linked-aware. Servers with no links sit in a strip at the bottom.
     struct Layout {
         var point: [String: CGPoint] = [:]
         var isolated: [StackNode] = []
-        var nodeW: CGFloat = 120
+        var nodeW: CGFloat = 96
 
         init(map: StackMap, size: CGSize, stripHeight: CGFloat) {
             let linked = Set(map.edges.flatMap { [$0.from, $0.to] })
@@ -90,14 +135,14 @@ struct StackMapView: View {
             let layers = map.layers()
             let cols = max((connected.compactMap { layers[$0.id] }.max() ?? 0) + 1, 1)
             let colW = size.width / CGFloat(cols)
-            nodeW = min(132, colW - 22)
-            let top: CGFloat = 26
-            let bottom = isolated.isEmpty ? 14 : stripHeight + 26
+            nodeW = min(104, colW - 14)
+            let top: CGFloat = 34
+            let bottom: CGFloat = isolated.isEmpty ? 58 : stripHeight + 64
             let height = max(size.height - top - bottom, 60)
             let lists: [[StackNode]] = (0..<cols).map { c in
                 connected.filter { layers[$0.id] == c }.sorted { ($0.project ?? "~", $0.port ?? 0) < ($1.project ?? "~", $1.port ?? 0) }
             }
-            let rowGap = min(62, height / CGFloat(max(lists.map(\.count).max() ?? 1, 1)))
+            let rowGap = min(88, height / CGFloat(max(lists.map(\.count).max() ?? 1, 1)))
             let mid = top + height / 2
             var y: [String: CGFloat] = [:]
 
@@ -106,7 +151,6 @@ struct StackMapView: View {
                 if c == 0 {
                     for (i, n) in list.enumerated() { y[n.id] = mid + (CGFloat(i) - CGFloat(list.count - 1) / 2) * rowGap }
                 } else {
-                    // Sit each node level with the nodes it is linked to, so lines stay short and cross less.
                     func desired(_ n: StackNode) -> CGFloat {
                         let ys = map.edges.compactMap { e -> CGFloat? in
                             if e.to == n.id, let v = y[e.from] { return v }
@@ -123,57 +167,69 @@ struct StackMapView: View {
                 }
                 for n in list { point[n.id] = CGPoint(x: colW * (CGFloat(c) + 0.5), y: y[n.id]!) }
             }
-            let perRow = max(Int(size.width / (nodeW + 10)), 1)
+            let perRow = max(Int(size.width / (nodeW + 8)), 1)
             for (i, n) in isolated.enumerated() {
                 let row = i / perRow, col = i % perRow
-                point[n.id] = CGPoint(x: 14 + nodeW / 2 + CGFloat(col) * (nodeW + 10), y: size.height - stripHeight / 2 - CGFloat(row) * 46 + 2)
+                point[n.id] = CGPoint(x: 14 + nodeW / 2 + CGFloat(col) * (nodeW + 8), y: size.height - stripHeight - 18 + CGFloat(row) * 84)
             }
         }
     }
 }
 
+/// One server as a tile with a glyph for its type, and its port and name underneath.
 private struct NodeView: View {
-    @EnvironmentObject var store: Store
     let node: StackNode
     let map: StackMap
     let selected: Bool
     let dimmed: Bool
     let width: CGFloat
+    let tile: CGFloat
 
     private var failing: Bool { node.role == .missing || (node.status ?? 0) >= 500 }
 
     var body: some View {
-        let tint: Color = failing ? Brand.alert : (node.role == .client ? Color.secondary : Brand.mint)
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: 5) {
-                Circle().fill(tint).frame(width: 6, height: 6)
-                Text(node.port.map { String($0) } ?? "worker").font(.system(size: 12, weight: .semibold)).monospacedDigit()
+        VStack(spacing: 4) {
+            ZStack {
+                if node.type == .missing {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(Brand.alert, style: StrokeStyle(lineWidth: 1.6, dash: [4, 3]))
+                    Image(systemName: node.type.symbol).font(.system(size: 19, weight: .semibold)).foregroundStyle(Brand.alert)
+                } else {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(node.type.tileColor)
+                    Image(systemName: node.type.symbol).font(.system(size: 18, weight: .medium)).foregroundStyle(.white)
+                }
             }
-            Text(node.title).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            .frame(width: tile, height: tile)
+            .overlay(alignment: .topTrailing) {
+                if node.role != .missing {
+                    Circle().fill(failing ? Brand.alert : (node.role == .client ? Color.secondary : Brand.mint))
+                        .frame(width: 11, height: 11)
+                        .overlay(Circle().strokeBorder(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
+                        .offset(x: 4, y: -4)
+                }
+            }
+            .overlay {
+                if selected { RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(Brand.primary, lineWidth: 2.5).padding(-4) }
+            }
+
+            VStack(spacing: 0) {
+                Text(node.port.map { String($0) } ?? "worker").font(.system(size: 11.5, weight: .semibold)).monospacedDigit()
+                Text(node.title).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+            }
+            .frame(width: width)
         }
-        .padding(.horizontal, 8)
-        .frame(width: width, height: 40, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(Theme.flat ? Color.primary.opacity(0.08) : Color.primary.opacity(0.07))
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(selected ? Brand.primary : (failing ? Brand.alert.opacity(0.7) : Color.primary.opacity(0.14)),
-                              style: StrokeStyle(lineWidth: selected ? 2 : 1, dash: node.role == .missing ? [3, 3] : []))
-        }
+        .frame(width: width, height: tile + 34)
         .opacity(dimmed ? 0.35 : 1)
         .contentShape(Rectangle())
         .tip(summary)
     }
 
     private var summary: String {
-        var lines = ["\(node.title)\(node.port.map { " :\($0)" } ?? "")" + (node.project.map { "  ·  \($0)" } ?? "")]
+        var lines = ["\(node.type.label): \(node.title)\(node.port.map { " :\($0)" } ?? "")"]
         let uses = map.uses(node.id), by = map.usedBy(node.id)
-        if !uses.isEmpty { lines.append("Uses: " + uses.map { "\($0.title) :\($0.port ?? 0)" }.joined(separator: ", ")) }
-        if !by.isEmpty { lines.append("Used by: " + by.map { "\($0.title)\($0.port.map { " :\($0)" } ?? "")" }.joined(separator: ", ")) }
-        for b in map.brokenLinks(node.id) { lines.append("Expects :\(b.to.split(separator: ":").last ?? "") (\(b.hint ?? "config")), but nothing is listening") }
-        if uses.isEmpty && by.isEmpty && map.brokenLinks(node.id).isEmpty { lines.append("No links found") }
+        if !uses.isEmpty { lines.append("Uses " + uses.map { "\($0.title) :\($0.port ?? 0)" }.joined(separator: ", ")) }
+        if !by.isEmpty { lines.append("Used by " + by.map { "\($0.title)\($0.port.map { " :\($0)" } ?? "")" }.joined(separator: ", ")) }
+        for b in map.brokenLinks(node.id) { lines.append("Expects :\(b.to.split(separator: ":").last ?? ""), nothing there") }
         return lines.joined(separator: "\n")
     }
 }
@@ -188,9 +244,11 @@ private struct DetailCard: View {
         let entry = store.entries.first { $0.id == node.entryID }
         let by = map.usedBy(node.id), uses = map.uses(node.id), broken = map.brokenLinks(node.id)
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
+            HStack(spacing: 8) {
+                Image(systemName: node.type.symbol).font(.system(size: 12, weight: .medium)).foregroundStyle(.white)
+                    .frame(width: 24, height: 24).background(node.type.tileColor, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 Text("\(node.title)\(node.port.map { " :\($0)" } ?? "")").font(.system(size: 13, weight: .semibold))
-                if let p = node.project { Text(p).font(.caption).foregroundStyle(.secondary) }
+                Text(node.type.label + (node.project.map { " · \($0)" } ?? "")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button { close() } label: { Image(systemName: "xmark") }.buttonStyle(.borderless)
             }

@@ -191,9 +191,10 @@ if let i = CommandLine.arguments.firstIndex(of: "--screenshot"), CommandLine.arg
                                         start: KnownStart(exec: "/usr/bin/true", argv: [], cwd: "/tmp"), containerID: nil, lastSeen: Date())
         // A sample stack for the map: three front ends call the API, the API uses Postgres and Redis, and a .env points at a port nobody listens on.
         func k(_ group: String, _ port: Int) -> String { "/Users/dev/\(group):\(port)" }
-        var nodes = list.map { StackNode(id: $0.key, role: .server, port: $0.port, title: $0.title, project: $0.projectName, status: $0.status, entryID: $0.id) }
-        nodes.append(StackNode(id: "client:1", role: .client, port: nil, title: "Queue worker", project: "billing-api", status: nil, entryID: nil))
-        nodes.append(StackNode(id: "missing:9200", role: .missing, port: 9200, title: "Nothing here", project: nil, status: nil, entryID: nil))
+        var nodes = list.map { StackNode(id: $0.key, role: .server, port: $0.port, title: $0.title, project: $0.projectName, status: $0.status, entryID: $0.id,
+                                         type: StackType.classify(title: $0.title, web: $0.web, isContainer: $0.container != nil)) }
+        nodes.append(StackNode(id: "client:1", role: .client, port: nil, title: "Queue worker", project: "billing-api", status: nil, entryID: nil, type: .worker))
+        nodes.append(StackNode(id: "missing:9200", role: .missing, port: 9200, title: "Nothing here", project: nil, status: nil, entryID: nil, type: .missing))
         func edge(_ f: String, _ t: String, _ n: Int) -> StackEdge { StackEdge(from: f, to: t, count: n, hint: nil, configured: false, broken: false) }
         let sampleStack = StackMap(nodes: nodes, edges: [
             edge(k("storefront", 5173), k("billing-api", 8000), 3), edge(k("dashboard", 3000), k("billing-api", 8000), 2),
