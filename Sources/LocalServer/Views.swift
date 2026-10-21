@@ -2,45 +2,59 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject var store: Store
+    @FocusState private var filterFocused: Bool
 
-    // Fixed: MenuBarExtra's window grows with content but never shrinks back.
+    // Fixed so the popover never changes size while you filter or toggle.
     private let listHeight: CGFloat = 400
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
-            if store.visible.isEmpty {
-                VStack(spacing: 6) {
-                    Image(systemName: "powersleep").font(.title2).foregroundStyle(.secondary)
-                    Text(store.query.isEmpty ? "Nothing is listening" : "No matches").foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, minHeight: listHeight, maxHeight: listHeight)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                        ForEach(store.groups, id: \.name) { g in
-                            Section {
-                                ForEach(g.entries) { RowView(entry: $0) }
-                            } header: {
-                                GroupHeader(name: g.name, path: g.path)
+            VStack(spacing: 0) {
+                if let port = store.portQuery { PortCard(port: port) }
+                if store.visible.isEmpty {
+                    if store.portQuery == nil {
+                        VStack(spacing: 6) {
+                            Image(systemName: "powersleep").font(.title2).foregroundStyle(.secondary)
+                            Text(store.query.isEmpty ? "Nothing is listening" : "No matches").foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        Spacer(minLength: 0)
+                    }
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                            ForEach(store.groups, id: \.name) { g in
+                                Section {
+                                    ForEach(g.entries) { RowView(entry: $0) }
+                                } header: {
+                                    GroupHeader(name: g.name, path: g.path)
+                                }
                             }
                         }
                     }
                 }
-                .frame(height: listHeight)
             }
+            .frame(height: listHeight)
             Divider()
             footer
         }
         .frame(width: 400)
+        .onReceive(NotificationCenter.default.publisher(for: .popoverDidShow)) { _ in
+            store.query = ""
+            filterFocused = true
+        }
     }
 
     private var header: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("Filter", text: $store.query)
+            TextField("Filter, or type a port (3000)", text: $store.query)
                 .textFieldStyle(.plain)
+                .focused($filterFocused)
+                .onSubmit { if let first = store.visible.first { store.primary(first) } }
             Button { Task { await store.refresh() } } label: { Image(systemName: "arrow.clockwise") }
                 .buttonStyle(.borderless).help("Rescan now")
         }
@@ -64,6 +78,7 @@ struct RootView: View {
                         NSApp.activate(ignoringOtherApps: true)
                         NSApp.orderFrontStandardAboutPanel(nil)
                     }
+                    Text("Shortcut: \(AppDelegate.shortcutLabel)")
                     Divider()
                     Toggle("Show system & apps", isOn: $store.showAll)
                     Toggle("Launch at login", isOn: Binding(get: { store.launchAtLogin }, set: { store.launchAtLogin = $0 }))
@@ -75,6 +90,36 @@ struct RootView: View {
             .padding(.horizontal, 12).padding(.vertical, 7)
         }
         .animation(.default, value: store.message)
+    }
+}
+
+/// "Is port N free? Who has it? What's the next one?" — shown when the filter is a port number.
+struct PortCard: View {
+    @EnvironmentObject var store: Store
+    let port: Int
+
+    var body: some View {
+        let owners = store.entries.filter { $0.port == port }
+        let inUse = !owners.isEmpty || !Ports.isFree(port)
+        let next = Ports.nextFree(after: port, taken: Set(store.entries.map(\.port)))
+        HStack(spacing: 10) {
+            Image(systemName: inUse ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+                .foregroundStyle(inUse ? .orange : .green).font(.title3)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(inUse ? "Port \(String(port)) is in use" : "Port \(String(port)) is free").font(.system(size: 13, weight: .semibold))
+                Text(!inUse ? "Go ahead and start your server"
+                     : owners.isEmpty ? "Held by a process LocalServer can't see (other user or system)"
+                     : "Press Stop on the row below to free it")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if inUse {
+                Button("Copy \(String(next))") { Actions.copy(String(next)); store.flash("Copied \(next) — next free port") }
+                    .controlSize(.small).help("Next free port")
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background((inUse ? Color.orange : Color.green).opacity(0.10))
     }
 }
 

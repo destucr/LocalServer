@@ -1,59 +1,66 @@
 # LocalServer
 
-A macOS menu bar app that shows every local port — Vite, Laravel, Next.js, Docker, Postgres — with the project it belongs to. Open, restart, tail logs, share or stop any of them in one click.
+A small Mac app that lives in your menu bar and shows every port your computer is listening on. Vite, Laravel, Next.js, Docker, Postgres, whatever you have running. Each one is shown with the project it belongs to, and you can open, restart, read the logs, share or stop it with one click.
 
-<p align="center"><img src="docs/screenshot.png" width="320" alt="LocalServer popover listing ports grouped by project"></p>
+<p align="center"><img src="docs/screenshot.png" width="420" alt="LocalServer popover listing ports grouped by project"></p>
 
-## Features
+## What you get
 
-- **Grouped by project** — resolved from the process's working directory (git root, `package.json`, `composer.json`, …).
-- **Framework detection** — Vite, Next.js, Nuxt, Astro, Laravel, Django, Rails, Uvicorn and more; databases like PostgreSQL, MySQL, Redis, MongoDB.
-- **Docker aware** — containers appear on their host ports, grouped by compose project.
-- **One-click actions** — hover a row for the rest:
-  - **Open** in the browser (**Copy** for databases)
-  - **Restart** — relaunches with the original args, env and working directory (wrapper chains like `npm run dev` included)
-  - **Logs** — follows the process's log file in Terminal (`docker logs -f` for containers)
-  - **Share** — copy localhost / LAN URL, or start a public tunnel (`cloudflared` or `ngrok`)
-  - **Stop** — SIGTERM, then SIGKILL; databases and containers ask for a second click
-- Orange wifi icon = listening on all interfaces (reachable from your network).
-- System daemons and apps (ControlCenter, Raycast…) are hidden unless enabled in the gear menu.
+- **Ports grouped by project.** The app looks at where each process was started to find its project.
+- **It knows what is running.** Vite, Next.js, Nuxt, Astro, Laravel, Django, Rails and more. Databases like PostgreSQL, MySQL, Redis and MongoDB too.
+- **Docker support.** Containers show up on their ports, grouped by compose project.
+- **A clear button on every row.** If the port serves a web page you get **Open**. If it is an API or a database you get **Copy**.
+- **More actions when you hover a row:**
+  - **Restart** brings the process back with the same command, folder and environment.
+  - **Logs** follows the log file in Terminal (or `docker logs -f` for containers).
+  - **Share** copies the localhost or network URL, or starts a public tunnel.
+  - **Stop** shuts it down. For databases and containers it asks you to click twice.
+- **Port checker.** Type a port number like `3000` in the search box. It tells you if the port is free, who is using it, and which port to use next.
+- **Global shortcut.** Press `Control + Option + P` from anywhere. The search box is ready, so type and press Return.
+- **Quiet by default.** System apps like ControlCenter and Raycast are hidden. You can turn them on from the gear menu.
+
+The little orange wifi icon means the server is open to your whole network, not just your Mac.
 
 ## Install
+
+With Homebrew:
 
 ```sh
 brew install --cask destucr/tap/localserver
 ```
 
-Or download the zip from [Releases](https://github.com/destucr/LocalServer/releases) (ad-hoc signed: right-click → Open the first time).
+Or download the zip from [Releases](https://github.com/destucr/LocalServer/releases), move the app to `/Applications`, and right click it and choose Open the first time. The app is not notarized yet, so macOS asks once.
 
-## Build from source
+## Build it yourself
 
-Requires macOS 14+ and the Swift toolchain (Xcode or Command Line Tools).
-
-```sh
-./build.sh           # build build/LocalServer.app
-./build.sh run       # build and launch
-./build.sh install   # build, copy to /Applications, launch
-```
-
-After changing code, run `./build.sh install` again — it stops the running app, replaces `/Applications/LocalServer.app` and relaunches it.
-
-### Versioning
-
-The version lives in the `VERSION` file and is stamped into the app (shown in the gear menu → About). To cut a release, commit your changes, then:
+You need macOS 14 or newer and Xcode or the Command Line Tools.
 
 ```sh
-./release.sh 1.1.0   # bumps VERSION, builds, tags, pushes, publishes the GitHub release
+./build.sh           # build the app into build/LocalServer.app
+./build.sh run       # build and start it
+./build.sh install   # build, copy to /Applications and start it
 ```
 
-"Launch at login" only works once the app is in `/Applications`. The app is ad-hoc signed and not sandboxed — it needs to inspect and signal your processes.
+After you change the code, run `./build.sh install` again. It stops the running app, replaces the old one and starts the new one.
 
-## Debug helpers
+"Launch at login" only works when the app is in `/Applications`. The app is not sandboxed, because it needs to look at your processes and stop them.
+
+## Releasing
+
+Put your changes in a commit, then run:
 
 ```sh
-LocalServer --scan                    # print what the app sees
-LocalServer --act kill|restart <port>
-LocalServer --screenshot out.png      # render the popover with sample data
+./release.sh 1.1.0
 ```
 
-Public tunnels need `cloudflared` or `ngrok`: `brew install cloudflared`.
+That bumps the version, builds the zip, tags it, pushes, creates the GitHub release and updates the Homebrew cask. The version number lives in the `VERSION` file and shows up in the About item of the gear menu.
+
+## Handy commands
+
+```sh
+LocalServer --scan                     # print what the app sees
+LocalServer --act kill|restart <port>  # stop or restart a port from the terminal
+LocalServer --screenshot out.png       # draw the popover with sample data
+```
+
+Public tunnels need `cloudflared` or `ngrok`. The easy way is `brew install cloudflared`.

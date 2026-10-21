@@ -30,9 +30,16 @@ final class Store: ObservableObject {
         }
     }
 
+    /// `3000` typed in the filter → treat it as a port lookup.
+    var portQuery: Int? {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard q.count >= 2, q.count <= 5, let n = Int(q), n > 0, n < 65536 else { return nil }
+        return n
+    }
+
     var visible: [PortEntry] {
         entries.filter { e in
-            (showAll || e.kind != .other) &&
+            (showAll || e.kind != .other || portQuery == e.port) &&
             (query.isEmpty || [e.title, e.group, e.command, String(e.port)].contains { $0.localizedCaseInsensitiveContains(query) })
         }
     }
@@ -67,9 +74,12 @@ final class Store: ObservableObject {
 
     func open(_ e: PortEntry) { NSWorkspace.shared.open(e.localURL) }
 
+    /// What Return does in the filter box: open pages, copy everything else.
+    func primary(_ e: PortEntry) { e.web == .page ? open(e) : copyLocal(e) }
+
     func kill(_ e: PortEntry) {
         // Databases need a second click; everything else is one click.
-        if e.kind == .database || e.container != nil, armedKill != e.id {
+        if e.kind == .database || e.kind == .other || e.container != nil, armedKill != e.id {
             armedKill = e.id
             Task { try? await Task.sleep(for: .seconds(3)); if armedKill == e.id { armedKill = nil } }
             return

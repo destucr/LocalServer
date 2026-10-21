@@ -23,7 +23,7 @@ if let i = CommandLine.arguments.firstIndex(of: "--act"), CommandLine.arguments.
 }
 // Debug helper: `LocalServer --screenshot out.png` renders the popover with sample data.
 if let i = CommandLine.arguments.firstIndex(of: "--screenshot"), CommandLine.arguments.count > i + 1 {
-    let out = CommandLine.arguments[i + 1]
+    let out_path = CommandLine.arguments[i + 1]
     MainActor.assumeIsolated {
         func e(_ port: Int, _ title: String, _ group: String, _ kind: EntryKind = .dev, up: String, web: WebKind = .page, lan: Bool = false) -> PortEntry {
             PortEntry(id: "\(port)", port: port, host: "127.0.0.1", lanExposed: lan, kind: kind, title: title, pid: 1,
@@ -50,10 +50,47 @@ if let i = CommandLine.arguments.firstIndex(of: "--screenshot"), CommandLine.arg
         RunLoop.current.run(until: Date().addingTimeInterval(1.0))
         if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
             host.cacheDisplay(in: host.bounds, to: rep)
-            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: out))
-            print("wrote \(out) \(size)")
+            // Compose the popover as a card with rounded corners and a shadow on a soft backdrop.
+            let scale: CGFloat = 2, pad: CGFloat = 44
+            let w = size.width + pad * 2, h = size.height + pad * 2
+            let out = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(w * scale), pixelsHigh: Int(h * scale),
+                                       bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                       colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+            out.size = NSSize(width: w, height: h)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: out)
+            let canvas = NSRect(x: 0, y: 0, width: w, height: h)
+            NSGradient(starting: NSColor(red: 0.87, green: 0.91, blue: 0.97, alpha: 1),
+                       ending: NSColor(red: 0.78, green: 0.83, blue: 0.93, alpha: 1))!.draw(in: canvas, angle: -50)
+            let card = NSRect(x: pad, y: pad, width: size.width, height: size.height)
+            let path = NSBezierPath(roundedRect: card, xRadius: 12, yRadius: 12)
+            NSGraphicsContext.saveGraphicsState()
+            let shadow = NSShadow()
+            shadow.shadowBlurRadius = 28
+            shadow.shadowOffset = NSSize(width: 0, height: -10)
+            shadow.shadowColor = NSColor.black.withAlphaComponent(0.28)
+            shadow.set()
+            NSColor.white.setFill()
+            path.fill()
+            NSGraphicsContext.restoreGraphicsState()
+            NSGraphicsContext.saveGraphicsState()
+            path.addClip()
+            rep.draw(in: card)
+            NSGraphicsContext.restoreGraphicsState()
+            NSColor.black.withAlphaComponent(0.12).setStroke()
+            path.lineWidth = 0.5
+            path.stroke()
+            NSGraphicsContext.restoreGraphicsState()
+            try? out.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: out_path))
+            print("wrote \(out_path)")
         }
     }
     exit(0)
 }
-LocalServerApp.main()
+MainActor.assumeIsolated {
+    let app = NSApplication.shared
+    let delegate = AppDelegate()
+    app.delegate = delegate
+    app.setActivationPolicy(.accessory)
+    withExtendedLifetime(delegate) { app.run() }
+}
