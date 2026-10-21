@@ -24,6 +24,13 @@ enum Editors {
     }
 }
 
+enum ExplainChoice {
+    case start, showLog, showReport, close
+    var title: String {
+        switch self { case .start: return "Start again"; case .showLog: return "Show log"; case .showReport: return "Show crash report"; case .close: return "Close" }
+    }
+}
+
 enum QR {
     static func image(_ text: String, size: CGFloat = 220) -> NSImage? {
         guard let f = CIFilter(name: "CIQRCodeGenerator") else { return nil }
@@ -64,6 +71,31 @@ enum Dialogs {
         a.accessoryView = field
         a.window.initialFirstResponder = field
         return a.runModal() == .alertFirstButtonReturn ? field.stringValue.trimmingCharacters(in: .whitespaces) : nil
+    }
+
+    /// "Why did it stop?" Shows the reason, the evidence and the last output. Returns the button the user picked.
+    static func explain(title: String, headline: String, facts: [String], lines: [String], when: String, buttons: [ExplainChoice]) -> ExplainChoice {
+        NSApp.activate(ignoringOtherApps: true)
+        let a = NSAlert()
+        a.messageText = title
+        a.informativeText = ([headline, ""] + facts.map { "• \($0)" } + (when.isEmpty ? [] : ["", when])).joined(separator: "\n")
+        a.alertStyle = .informational
+        for b in buttons { a.addButton(withTitle: b.title) }
+        a.addButton(withTitle: "Close")
+        if !lines.isEmpty {
+            let text = NSTextView(frame: NSRect(x: 0, y: 0, width: 440, height: 150))
+            text.string = lines.joined(separator: "\n")
+            text.font = .monospacedSystemFont(ofSize: 10.5, weight: .regular)
+            text.isEditable = false
+            text.textContainerInset = NSSize(width: 6, height: 6)
+            let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 440, height: 150))
+            scroll.documentView = text
+            scroll.hasVerticalScroller = true
+            scroll.borderType = .lineBorder
+            a.accessoryView = scroll
+        }
+        let r = a.runModal().rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
+        return r >= 0 && r < buttons.count ? buttons[r] : .close
     }
 
     /// Shows a QR code. Returns true if the user chose to copy the link.

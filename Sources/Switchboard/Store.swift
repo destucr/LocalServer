@@ -44,7 +44,8 @@ final class Store: ObservableObject {
     private var messageTask: Task<Void, Never>?
 
     // Crash detection
-    private var watching: [String: PortEntry] = [:]
+    private var watching: [String: Watch] = [:]
+    private var diagnoses: [String: Diagnosis] = [:]   // in memory only: log lines can hold secrets
     private var missing: [String: Int] = [:]
     private var expectedStops: [String: Date] = [:]
 
@@ -201,21 +202,51 @@ final class Store: ObservableObject {
         if s != stopped { stopped = s }
     }
 
-    /// A server that was listening and is gone for two scans in a row, without us stopping it.
+    /// What we know about a server while it is alive, so we can explain it once it is gone.
+    private struct Watch { var entry: PortEntry; var logPath: String?; var shellPid: Int32? }
+
+    /// A server that was listening and is gone for two scans in a row. Works out why, before the evidence goes stale.
     private func detectStops(_ list: [PortEntry]) {
         let now = Set(list.filter { $0.kind != .other }.map(\.key))
         for k in now { missing[k] = nil }
-        for (k, e) in Array(watching) where !now.contains(k) {
+        for (k, w) in Array(watching) where !now.contains(k) {
             let n = (missing[k] ?? 0) + 1
-            if n >= 2 {
-                watching[k] = nil; missing[k] = nil
-                let expected = expectedStops[k].map { Date().timeIntervalSince($0) < 120 } ?? false
-                if notifyOnStop, !expected {
-                    Notifier.post(title: "\(names[k] ?? e.title) stopped", body: "Port \(e.port) in \(e.group) is no longer listening.")
-                }
-            } else { missing[k] = n }
+            guard n >= 2 else { missing[k] = n; continue }
+            watching[k] = nil; missing[k] = nil
+
+            let byUser = expectedStops[k].map { Date().timeIntervalSince($0) < 120 } ?? false
+            let takenOver = list.first { $0.port == w.entry.port && $0.pid != w.entry.pid && $0.kind != .other }
+            let d = Diagnose.run(entry: w.entry, byUser: byUser, logPath: w.logPath, shellPid: w.shellPid, takenOverBy: takenOver)
+            diagnoses[k] = d
+            if var kn = known[k] { kn.stopReason = d.reason; kn.stoppedAt = d.at; known[k] = kn; dirty = true }
+            if notifyOnStop, !byUser {
+                Notifier.post(title: "\(names[k] ?? w.entry.title) :\(w.entry.port) stopped", body: d.reason)
+            }
         }
-        for e in list where e.kind != .other { watching[e.key] = e }
+        for e in list where e.kind != .other {
+            if watching[e.key]?.entry.pid != e.pid {
+                watching[e.key] = Watch(entry: e, logPath: e.pid.flatMap { Proc.logFile($0) }, shellPid: e.pid.flatMap { Proc.ancestorShell($0) })
+            } else {
+                watching[e.key]?.entry = e
+            }
+        }
+    }
+
+    /// The "Why?" dialog for a stopped server.
+    func explain(_ k: KnownServer) {
+        let d = diagnoses[k.key]
+        guard let reason = d?.reason ?? k.stopReason else { flash("Nothing was recorded about how this one stopped."); return }
+        let when = (d?.at ?? k.stoppedAt).map { "Stopped \(formatDuration(Int(Date().timeIntervalSince($0)))) ago." } ?? ""
+        var buttons: [ExplainChoice] = []
+        if k.canStart { buttons.append(.start) }
+        if d?.logPath != nil { buttons.append(.showLog) }
+        if d?.reportPath != nil { buttons.append(.showReport) }
+        switch Dialogs.explain(title: "Why \(k.title) :\(k.port) stopped", headline: reason, facts: d?.facts ?? [], lines: d?.logLines ?? [], when: when, buttons: buttons) {
+        case .start: start(k)
+        case .showLog: if let p = d?.logPath { NSWorkspace.shared.open(URL(fileURLWithPath: p)) }
+        case .showReport: if let p = d?.reportPath { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: p)]) }
+        case .close: break
+        }
     }
 
     // MARK: Persistence

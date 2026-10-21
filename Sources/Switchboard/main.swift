@@ -45,6 +45,53 @@ if let i = CommandLine.arguments.firstIndex(of: "--act"), CommandLine.arguments.
     exit(0)
 }
 
+// Debug helper: `Switchboard --diagnose-test` runs the "why did it stop?" engine against real processes.
+if CommandLine.arguments.contains("--diagnose-test") {
+    let tmp = NSTemporaryDirectory() + "sbdiag-\(getpid())"
+    try? FileManager.default.createDirectory(atPath: tmp, withIntermediateDirectories: true)
+    func entry(pid: Int32, exec: String) -> PortEntry {
+        PortEntry(id: "t", port: 9999, host: "127.0.0.1", lanExposed: false, kind: .dev, title: "Test", pid: pid, command: exec, projectName: "t",
+                  projectPath: nil, group: "t", uptime: nil, container: nil, web: .none, restart: nil)
+    }
+    func launch(_ exe: String, _ args: [String], log: String? = nil) -> Process {
+        let p = Process(); p.executableURL = URL(fileURLWithPath: exe); p.arguments = args
+        if let log { FileManager.default.createFile(atPath: log, contents: nil); let h = FileHandle(forWritingAtPath: log); p.standardOutput = h; p.standardError = h }
+        p.terminationHandler = { ExitRegistry.record(pid: $0.processIdentifier, status: $0.terminationStatus, signaled: $0.terminationReason == .uncaughtSignal) }
+        try! p.run(); return p
+    }
+    func show(_ title: String, _ d: Diagnosis) {
+        print("== \(title)\n   reason: \(d.reason)"); for f in d.facts { print("   - \(f)") }
+        if !d.logLines.isEmpty { print("   log: \(d.logLines.last!)") }
+    }
+
+    let killed = launch("/bin/sleep", ["60"]); usleep(200_000); kill(killed.processIdentifier, SIGKILL); killed.waitUntilExit(); usleep(200_000)
+    show("kill -9", Diagnose.run(entry: entry(pid: killed.processIdentifier, exec: "/bin/sleep"), byUser: false, logPath: nil, shellPid: nil, takenOverBy: nil))
+
+    let termed = launch("/bin/sleep", ["60"]); usleep(200_000); kill(termed.processIdentifier, SIGTERM); termed.waitUntilExit(); usleep(200_000)
+    show("kill (SIGTERM)", Diagnose.run(entry: entry(pid: termed.processIdentifier, exec: "/bin/sleep"), byUser: false, logPath: nil, shellPid: nil, takenOverBy: nil))
+
+    let log1 = tmp + "/a.log"
+    let crashed = launch("/bin/sh", ["-c", "echo 'starting'; echo \"Error: Cannot find module 'left-pad'\"; exit 1"], log: log1); crashed.waitUntilExit(); usleep(200_000)
+    show("exit 1 with a module error", Diagnose.run(entry: entry(pid: crashed.processIdentifier, exec: "/bin/sh"), byUser: false, logPath: log1, shellPid: nil, takenOverBy: nil))
+
+    let log2 = tmp + "/b.log"
+    try? "listening...\nError: listen EADDRINUSE: address already in use :::3000\n".write(toFile: log2, atomically: true, encoding: .utf8)
+    show("port clash in the log", Diagnose.run(entry: entry(pid: 1, exec: "node"), byUser: false, logPath: log2, shellPid: nil, takenOverBy: nil))
+
+    let log3 = tmp + "/c.log"
+    try? "FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory\n".write(toFile: log3, atomically: true, encoding: .utf8)
+    show("heap out of memory in the log", Diagnose.run(entry: entry(pid: 1, exec: "node"), byUser: false, logPath: log3, shellPid: nil, takenOverBy: nil))
+
+    let reports = tmp + "/reports"; try? FileManager.default.createDirectory(atPath: reports, withIntermediateDirectories: true)
+    try? "{\"app_name\":\"node\"}\n{\"pid\":4242,\"exception\":{\"type\":\"EXC_BAD_ACCESS\",\"signal\":\"SIGSEGV\"}}".write(toFile: reports + "/node-2026-10-21-101010.ips", atomically: true, encoding: .utf8)
+    show("macOS crash report", Diagnose.run(entry: entry(pid: 4242, exec: "/opt/homebrew/bin/node"), byUser: false, logPath: nil, shellPid: nil, takenOverBy: nil, reportsDir: reports))
+
+    show("you pressed Stop", Diagnose.run(entry: entry(pid: 1, exec: "node"), byUser: true, logPath: nil, shellPid: nil, takenOverBy: nil))
+    show("no evidence at all", Diagnose.run(entry: entry(pid: 999999, exec: "node"), byUser: false, logPath: nil, shellPid: nil, takenOverBy: nil))
+    try? FileManager.default.removeItem(atPath: tmp)
+    exit(0)
+}
+
 // Debug helper: `Switchboard --stack` prints who talks to whom.
 if CommandLine.arguments.contains("--stack") {
     let m = Scanner.stack(entries: Scanner.scan())

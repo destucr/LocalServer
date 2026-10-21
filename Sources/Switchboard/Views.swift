@@ -456,6 +456,12 @@ struct StoppedRow: View {
     let server: KnownServer
     @State private var hover = false
 
+    private var stoppedLine: String {
+        guard let reason = server.stopReason else { return "stopped" }
+        let ago = server.stoppedAt.map { formatDuration(Int(Date().timeIntervalSince($0))) + " ago · " } ?? ""
+        return "stopped \(ago)\(reason)"
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             Circle().strokeBorder(Color.secondary, lineWidth: 1).frame(width: 7, height: 7)
@@ -463,7 +469,14 @@ struct StoppedRow: View {
                 .foregroundStyle(.secondary).frame(width: 58, alignment: .leading)
             VStack(alignment: .leading, spacing: 1) {
                 Text(store.names[server.key] ?? server.title).font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
-                Text("stopped").font(.system(size: 10.5)).foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Text(stoppedLine).font(.system(size: 10.5)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                    if server.stopReason != nil {
+                        Button("Why?") { store.explain(server) }
+                            .buttonStyle(.plain).font(.system(size: 10.5, weight: .medium)).foregroundStyle(Brand.primaryText)
+                            .hoverTip("Why: see what we know about how it stopped, and its last output", tint: Brand.primary)
+                    }
+                }
             }
             Spacer(minLength: 4)
             if let label = store.busy[server.key] {

@@ -62,6 +62,7 @@ enum Actions {
         p.standardInput = FileHandle.nullDevice
         p.standardOutput = log
         p.standardError = log
+        p.terminationHandler = { ExitRegistry.record(pid: $0.processIdentifier, status: $0.terminationStatus, signaled: $0.terminationReason == .uncaughtSignal) }
         do { try p.run() } catch { throw ActionError.message("Launch failed: \(error.localizedDescription)") }
     }
 
@@ -97,6 +98,7 @@ enum Actions {
         p.standardInput = FileHandle.nullDevice
         p.standardOutput = log
         p.standardError = log
+        p.terminationHandler = { ExitRegistry.record(pid: $0.processIdentifier, status: $0.terminationStatus, signaled: $0.terminationReason == .uncaughtSignal) }
         do { try p.run() } catch { throw ActionError.message("Launch failed: \(error.localizedDescription)") }
     }
 
