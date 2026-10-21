@@ -4,6 +4,8 @@ All notable changes to Switchboard. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+## [1.8.3] - 2026-10-22
+
 ### Fixed
 - A stopped server whose folder was deleted or moved used to say "The folder is gone" and nothing else. Its row now says so, and the Start button becomes Forget.
 
