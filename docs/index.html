@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Switchboard: see every local port on your Mac, with its project</title>
+<meta name="description" content="A free Mac menu bar app that lists every open localhost port (Vite, Next.js, Laravel, Docker, Postgres) with the project it belongs to. Open, restart, read logs, share or kill a port in one click.">
+<link rel="canonical" href="https://destucr.github.io/Switchboard/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Switchboard: every local port, with its project">
+<meta property="og:description" content="Free Mac menu bar app. See what is running on localhost, which project owns it, and open, restart, share or stop it in one click.">
+<meta property="og:url" content="https://destucr.github.io/Switchboard/">
+<meta property="og:image" content="https://destucr.github.io/Switchboard/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://destucr.github.io/Switchboard/og.png">
+<meta name="theme-color" content="#4F46E5">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Switchboard","applicationCategory":"DeveloperApplication","operatingSystem":"macOS 14 or later","description":"A Mac menu bar app that lists every open localhost port with the project it belongs to, and lets you open, restart, read logs, share or stop each server.","url":"https://destucr.github.io/Switchboard/","downloadUrl":"https://github.com/destucr/Switchboard/releases/latest","image":"https://destucr.github.io/Switchboard/og.png","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"How do I see what is using port 3000 on a Mac?","acceptedAnswer":{"@type":"Answer","text":"Type 3000 in Switchboard's filter box. It shows whether the port is free and, if not, which process and project holds it. In Terminal the equivalent is: lsof -i :3000"}},
+{"@type":"Question","name":"How do I kill the process on a port on macOS?","acceptedAnswer":{"@type":"Answer","text":"Click Stop on the server's row in Switchboard. In Terminal: kill $(lsof -t -i :3000)"}},
+{"@type":"Question","name":"Does it work with Docker?","acceptedAnswer":{"@type":"Answer","text":"Yes. Docker containers with published ports are listed next to your other servers, and you can stop, restart and read their logs."}},
+{"@type":"Question","name":"Is it free?","acceptedAnswer":{"@type":"Answer","text":"Yes. It is open source and installs with Homebrew."}}
+]}
+</script>
+<style>
+:root{--bg:#f6f6fd;--ink:#1c1b3c;--sub:#55557a;--brand:#4F46E5;--card:#fff;--line:#e3e3f3;--code:#ececfa}
+@media (prefers-color-scheme:dark){:root{--bg:#12121c;--ink:#ececf8;--sub:#a3a3c4;--brand:#8b85ff;--card:#1b1b2a;--line:#2b2b40;--code:#232336}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 -apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif}
+main{max-width:980px;margin:0 auto;padding:0 20px}
+header{display:flex;justify-content:space-between;align-items:center;padding:22px 0}
+header b{font-size:19px}
+header a{color:var(--sub);text-decoration:none;margin-left:20px;font-size:15px}
+.hero{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center;padding:32px 0 56px}
+h1{font-size:46px;line-height:1.1;margin:0 0 18px;letter-spacing:-.02em}
+.lead{color:var(--sub);font-size:19px;margin:0 0 26px}
+.btn{display:inline-block;background:var(--brand);color:#fff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:10px}
+@media (prefers-color-scheme:dark){.btn{color:#12121c}}
+code,pre{font:14px ui-monospace,SFMono-Regular,Menlo,monospace}
+pre{background:var(--code);padding:14px 16px;border-radius:10px;overflow-x:auto;margin:16px 0 0}
+.shots img{width:100%;height:auto;border-radius:14px;display:block}
+.shots .dark{display:none}
+@media (prefers-color-scheme:dark){.shots .light{display:none}.shots .dark{display:block}}
+h2{font-size:28px;margin:56px 0 18px;letter-spacing:-.01em}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+.card h3{margin:0 0 6px;font-size:18px}.card p{margin:0;color:var(--sub);font-size:16px}
+details{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin-bottom:10px}
+summary{cursor:pointer;font-weight:600}
+details p{color:var(--sub);margin:10px 0 0}
+footer{color:var(--sub);font-size:14px;padding:48px 0}
+footer a{color:var(--sub)}
+@media (max-width:760px){.hero{grid-template-columns:1fr}h1{font-size:36px}}
+</style>
+</head>
+<body>
+<main>
+<header><b>Switchboard</b><nav><a href="#features">Features</a><a href="#faq">FAQ</a><a href="https://github.com/destucr/Switchboard">GitHub</a></nav></header>
+
+<section class="hero">
+<div>
+<h1>Every local port, with its project.</h1>
+<p class="lead">A free Mac menu bar app that shows what is running on localhost. Open, restart, read logs, share or stop any dev server in one click.</p>
+<a class="btn" href="https://github.com/destucr/Switchboard/releases/latest">Download for Mac</a>
+<pre>brew install --cask destucr/tap/switchboard</pre>
+</div>
+<div class="shots">
+<img class="light" src="screenshot-light.png" width="582" height="622" alt="Switchboard listing localhost ports grouped by project">
+<img class="dark" src="screenshot-dark.png" width="582" height="622" alt="Switchboard in dark mode listing localhost ports grouped by project">
+</div>
+</section>
+
+<h2 id="features">What it does</h2>
+<div class="grid">
+<div class="card"><h3>Ports grouped by project</h3><p>Vite, Next.js, Laravel, Django, Docker, Postgres, Redis and more, each under the project folder it came from.</p></div>
+<div class="card"><h3>The right button for each server</h3><p>Open for web pages. Copy URL for APIs and databases. Stop and Restart for all of them.</p></div>
+<div class="card"><h3>See how servers connect</h3><p>A map shows which server talks to which, and warns you before you stop something others depend on.</p></div>
+<div class="card"><h3>Start a whole project</h3><p>Stopped servers stay listed. One click starts the project again, in the order its servers depend on each other.</p></div>
+<div class="card"><h3>Share your stack</h3><p>Save a <code>switchboard.json</code> in the repo. A teammate adds the folder and presses Start stack.</p></div>
+<div class="card"><h3>Port checker</h3><p>Type <code>3000</code> to see whether it is free and who has it. Change a server's port and undo it if it goes wrong.</p></div>
+</div>
+
+<h2>Install</h2>
+<pre>brew install --cask destucr/tap/switchboard</pre>
+<p style="color:var(--sub)">Needs macOS 14 or later. The app is not notarized yet, so right click it and choose Open the first time. The cask also installs a <code>switchboard</code> command for status, start and stop from the terminal.</p>
+
+<h2 id="faq">Questions</h2>
+<details><summary>How do I see what is using port 3000 on a Mac?</summary><p>Type 3000 in Switchboard's filter box. It shows whether the port is free and, if not, which process and project holds it. In Terminal the equivalent is <code>lsof -i :3000</code>.</p></details>
+<details><summary>How do I kill the process on a port on macOS?</summary><p>Click Stop on the server's row. In Terminal: <code>kill $(lsof -t -i :3000)</code>.</p></details>
+<details><summary>Does it work with Docker?</summary><p>Yes. Containers with published ports are listed next to your other servers, and you can stop, restart and read their logs.</p></details>
+<details><summary>Is it free?</summary><p>Yes. It is open source and installs with Homebrew.</p></details>
+
+<footer>Switchboard is open source. <a href="https://github.com/destucr/Switchboard">Source and issues on GitHub</a>.</footer>
+</main>
+</body>
+</html>

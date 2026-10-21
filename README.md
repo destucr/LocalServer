@@ -1,6 +1,8 @@
 # Switchboard
 
-A Mac menu bar app that shows every port you have open, with the project it belongs to. Open, restart, read logs, share or stop any of them in one click.
+A free Mac menu bar app that shows every localhost port you have open, with the project it belongs to. Find what is using port 3000, then open, restart, read logs, share or stop it in one click.
+
+[Website](https://destucr.github.io/Switchboard/) · [Download](https://github.com/destucr/Switchboard/releases/latest)
 
 <p align="center">
   <picture>
@@ -51,3 +53,7 @@ Needs macOS 14+ and Xcode or the Command Line Tools.
 ./build.sh install    # build, copy to /Applications, start
 ./release.sh 1.1.0    # bump version, tag, publish release, update the Homebrew cask
 ```
+
+## License
+
+MIT

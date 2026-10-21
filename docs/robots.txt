@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://destucr.github.io/Switchboard/sitemap.xml
