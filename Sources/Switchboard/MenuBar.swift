@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let popover = NSPopover()
     private var bag = Set<AnyCancellable>()
     private var hotKey: HotKey?
+    private var outsideClick: Any?   // clicks in other apps, which a transient popover does not always notice
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -100,6 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func popoverDidClose(_ notification: Notification) {
         TipWindow.shared.hide()
+        if let m = outsideClick { NSEvent.removeMonitor(m); outsideClick = nil }
         MainActor.assumeIsolated { store.logs?.stop() }   // nothing reads the file while the popover is hidden
     }
 
@@ -119,6 +121,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.show(relativeTo: b.bounds, of: b, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
         store.logs?.start()
+        // A global monitor only sees clicks that go to other apps, so clicking inside Switchboard or on its dialogs is unaffected.
+        if outsideClick == nil {
+            outsideClick = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
+                DispatchQueue.main.async { if self?.popover.isShown == true { self?.popover.performClose(nil) } }
+            }
+        }
         NotificationCenter.default.post(name: .popoverDidShow, object: nil)
         Task { await store.refresh(); await store.refreshMux() }
     }
