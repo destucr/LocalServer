@@ -42,7 +42,8 @@ enum Actions {
 
     // MARK: Restart
 
-    static func restart(_ e: PortEntry) async throws {
+    /// `port` restarts it on another port. The environment keeps everything else it had.
+    static func restart(_ e: PortEntry, port: Int? = nil) async throws {
         if let c = e.container {
             guard let bin = Docker.binary else { throw ActionError.message("docker not found") }
             let r = await Task.detached { runCapture(bin, ["restart", c.id], timeout: 60) }.value
@@ -52,12 +53,14 @@ enum Actions {
         guard let spec = e.restart, let pid = e.pid else { throw ActionError.message("Nothing to restart") }
         try await terminate(pids: unique([spec.rootPid, pid]))
 
-        let log = try openLog(e.group, e.port, label: "restarted")
+        let log = try openLog(e.group, port ?? e.port, label: port == nil ? "restarted" : "moved to :\(port!)")
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: spec.exec)
-        p.arguments = Array(spec.argv.dropFirst())
-        p.environment = spec.env
+        var argv = spec.argv, env = spec.env
+        if let port { let r = PortRewrite.apply(argv: argv, env: env, old: e.port, new: port, cwd: spec.cwd); argv = r.argv; env = r.env }
+        p.arguments = Array(argv.dropFirst())
+        p.environment = env
         p.currentDirectoryURL = URL(fileURLWithPath: spec.cwd)
         p.standardInput = FileHandle.nullDevice
         p.standardOutput = log

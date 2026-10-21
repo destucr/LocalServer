@@ -195,6 +195,59 @@ if CommandLine.arguments.contains("--drag-test") {
     exit(0)
 }
 
+// Debug helper: `Switchboard --port-e2e` moves a real server to another port and back, and checks the rewriter on common commands.
+if CommandLine.arguments.contains("--port-e2e") {
+    MainActor.assumeIsolated {
+        func rw(_ argv: [String], _ old: Int = 3000) -> String { let r = PortRewrite.apply(argv: argv, env: [:], old: old, new: 4000, cwd: NSHomeDirectory() + "/Projects/_scripts"); return r.argv.joined(separator: " ") + (r.env["PORT"].map { "  PORT=\($0)" } ?? "") }
+        let sd = NSHomeDirectory() + "/Projects/_scripts"
+        try? FileManager.default.createDirectory(atPath: sd, withIntermediateDirectories: true)
+        try? "{\"scripts\":{\"dev\":\"vite\",\"start\":\"node server.js\"}}".write(toFile: sd + "/package.json", atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(atPath: sd) }
+        for c in [["node", "vite", "--port", "3000"], ["node", "vite"], ["npm", "run", "dev"], ["pnpm", "dev"], ["npm", "start"], ["node", "next", "dev", "-p", "3000"], ["node", "next", "dev"],
+                  ["php", "artisan", "serve", "--port=3000"], ["php", "artisan", "serve"], ["python3", "-m", "http.server", "3000"], ["php", "-S", "localhost:3000"], ["node", "server.js"]] {
+            print(c.joined(separator: " "), "→", rw(c))
+        }
+        _ = NSApplication.shared
+        let dir = NSHomeDirectory() + "/Projects/_porttest"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try? "{\"name\":\"porttest\"}".write(toFile: dir + "/package.json", atomically: true, encoding: .utf8)
+        try? "require('http').createServer((q,r)=>r.end('ok')).listen(process.env.PORT||8731)".write(toFile: dir + "/s.js", atomically: true, encoding: .utf8)
+        let node = ["/opt/homebrew/bin/node", "/usr/local/bin/node"].first { FileManager.default.isExecutableFile(atPath: $0) } ?? "/usr/bin/env"
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: node)
+        p.arguments = node == "/usr/bin/env" ? ["node", "s.js"] : ["s.js"]
+        p.currentDirectoryURL = URL(fileURLWithPath: dir)
+        p.standardOutput = FileHandle.nullDevice; p.standardError = FileHandle.nullDevice
+        try! p.run()
+        func spin(until cond: () -> Bool, timeout: Double = 25) -> Bool {
+            let end = Date().addingTimeInterval(timeout)
+            while Date() < end { if cond() { return true }; RunLoop.current.run(until: Date().addingTimeInterval(0.1)) }
+            return cond()
+        }
+        let store = Store.shared
+        _ = spin(until: { Probe.isListening(8731) }, timeout: 6)
+        Task { await store.refresh() }
+        _ = spin(until: { store.entries.contains { $0.port == 8731 } })
+        guard let entry = store.entries.first(where: { $0.port == 8731 }) else { print("server not seen"); exit(1) }
+        store.rename(entry: entry, to: "porttest-api")
+        store.changePort(entry, to: 8732)
+        let moved = spin(until: { Probe.isListening(8732) && !Probe.isListening(8731) })
+        print("1. moved to :8732, old port closed:", moved, "| message:", store.message ?? "-")
+        _ = spin(until: { store.undo != nil })
+        let renamed = store.entries.first { $0.port == 8732 }.map { store.displayName($0) }
+        print("2. Undo offered:", store.undo != nil, "| name carried over:", renamed ?? "-")
+        store.runUndo()
+        let back = spin(until: { Probe.isListening(8731) && !Probe.isListening(8732) })
+        print("3. Undo moved it back to :8731:", back)
+        _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/pkill"), arguments: ["-f", "_porttest"])
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        if let k = store.stopped.first(where: { $0.port == 8731 || $0.port == 8732 }) { store.forget(k) }
+        try? FileManager.default.removeItem(atPath: dir)
+        for port in [8731, 8732] { try? FileManager.default.removeItem(atPath: NSHomeDirectory() + "/Library/Logs/Switchboard/_porttest-\(port).log") }
+    }
+    exit(0)
+}
+
 // Debug helper: `Switchboard --undo-e2e` stops a real server through the Stop path, presses Undo, and checks it comes back.
 if CommandLine.arguments.contains("--undo-e2e") {
     MainActor.assumeIsolated {

@@ -514,6 +514,47 @@ final class Store: ObservableObject {
         }
     }
 
+    /// Asks for a port, then restarts the server there.
+    func askPort(_ e: PortEntry) {
+        let suggestion = Ports.nextFree(after: e.port, taken: Set(entries.map(\.port)))
+        guard let text = Dialogs.prompt("Change port of \(displayName(e))", "Restarts it on another port. It is on :\(e.port) now.", value: String(suggestion)),
+              !text.isEmpty else { return }
+        guard let port = Int(text), (1024...65535).contains(port) else { flash("Use a port between 1024 and 65535."); return }
+        changePort(e, to: port)
+    }
+
+    func changePort(_ e: PortEntry, to port: Int) {
+        guard e.container == nil, e.restart != nil else { flash("Switchboard can't restart this one, so it can't change its port."); return }
+        guard port != e.port else { return }
+        guard Ports.isFree(port) else { flash("Port \(port) is already in use."); return }
+        let oldKey = e.key, newKey = String(e.key.dropLast(String(e.port).count)) + String(port)
+        let oldKnown = known[oldKey]
+        expectedStops[oldKey] = Date()
+        busy[oldKey] = "Moving to :\(port)…"
+        Task {
+            defer { busy[oldKey] = nil }
+            do { try await Actions.restart(e, port: port) } catch { flash(error.localizedDescription); return }
+            for _ in 0..<60 where !Probe.isListening(port) { try? await Task.sleep(for: .milliseconds(250)) }
+            await refresh()
+            let back = UndoAction(label: "Undo") { [weak self] in
+                guard let self else { return }
+                if let now = self.entries.first(where: { $0.key == newKey }) { self.changePort(now, to: e.port) }
+                else if let k = oldKnown { self.start(k) }
+            }
+            if Probe.isListening(port) {
+                if let n = names[oldKey] { names[newKey] = n; names[oldKey] = nil }
+                if pinned.contains(oldKey) { pinned.remove(oldKey); pinned.insert(newKey) }
+                known[oldKey] = nil; stopped.removeAll { $0.key == oldKey }
+                dirty = true; persist(force: true)
+                flash("Moved \(displayName(e)) to :\(port).", undo: back)
+            } else if entries.contains(where: { $0.key == oldKey }) {
+                flash("It came back on :\(e.port). This server ignores the port setting, so it has to be changed in its own config.")
+            } else {
+                flash("Nothing is listening on :\(port) yet. It may be slow to start, or ignore the port setting.", undo: back)
+            }
+        }
+    }
+
     func start(_ k: KnownServer) {
         perform(k.key, label: "Starting…", success: "Starting \(k.title) on :\(k.port). It can take a few seconds to show up.", settle: 2.0) {
             try await Actions.start(k)
@@ -579,6 +620,8 @@ final class Store: ObservableObject {
         if on { pinned.insert(key) } else { pinned.remove(key) }
         dirty = true; persist(force: true)
     }
+
+    func rename(entry e: PortEntry, to name: String) { names[e.key] = name; dirty = true; persist(force: true) }
 
     func rename(_ e: PortEntry) {
         guard let new = Dialogs.prompt("Rename :\(e.port)", "Leave empty to go back to “\(e.title)”.", value: names[e.key] ?? "") else { return }

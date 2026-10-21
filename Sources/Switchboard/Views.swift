@@ -468,6 +468,7 @@ struct RowView: View {
         Menu {
             Button(store.isPinned(entry.key) ? "Unpin  (⌘P)" : "Pin to top  (⌘P)") { store.togglePin(entry) }
             Button("Rename…") { store.rename(entry) }
+            Button("Change port…") { store.askPort(entry) }.disabled(entry.container != nil || entry.restart == nil)
             if entry.web == .api { Button("Open \(entry.address) in browser") { store.open(entry) } }
             if let path = entry.projectPath {
                 Divider()
@@ -621,6 +622,7 @@ struct ServerMenu: View {
         Divider()
         Button(store.isPinned(entry.key) ? "Unpin" : "Pin to top") { store.togglePin(entry) }
         Button("Rename…") { store.rename(entry) }
+        Button("Change port…") { store.askPort(entry) }.disabled(entry.container != nil || entry.restart == nil)
         if entry.web != .none {
             Button("Copy Wi-Fi link") { store.copyLAN(entry) }
             Button("Show QR code for your phone…") { store.showQR(entry) }
