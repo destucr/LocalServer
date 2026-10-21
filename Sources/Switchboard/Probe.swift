@@ -28,6 +28,12 @@ enum Probe {
         return r
     }
 
+    /// True if something accepts connections on this port (any protocol).
+    static func isListening(_ port: Int) -> Bool {
+        for v6 in [false, true] { if let fd = connectLoopback(port: port, v6: v6) { close(fd); return true } }
+        return false
+    }
+
     private static func request(port: Int, host: String) -> ProbeResult {
         let order = host.contains("::1") ? [true, false] : [false, true]
         for v6 in order {

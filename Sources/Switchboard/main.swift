@@ -17,6 +17,34 @@ if let i = CommandLine.arguments.firstIndex(of: "--tip"), CommandLine.arguments.
     exit(0)
 }
 
+// Debug helpers: `Switchboard --plan <group>` prints the start order; `--act start-stack <group>` runs it.
+func loadKnown() -> [KnownServer] {
+    let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Switchboard/state.json")
+    struct S: Codable { var known: [String: KnownServer] }
+    guard let data = try? Data(contentsOf: url), let st = try? JSONDecoder().decode(S.self, from: data) else { return [] }
+    let running = Set(Scanner.scan().map(\.key))
+    return st.known.values.filter { !running.contains($0.key) }
+}
+if let i = CommandLine.arguments.firstIndex(of: "--plan"), CommandLine.arguments.count > i + 1 {
+    let stopped = loadKnown()
+    let levels = StartPlan.levels(startable: stopped.filter { $0.group == CommandLine.arguments[i + 1] && $0.canStart }, pool: stopped)
+    for (n, tier) in levels.enumerated() { print("tier \(n + 1): " + tier.map { "\($0.title) :\($0.port) [\($0.group)]" }.joined(separator: ", ")) }
+    exit(0)
+}
+if let i = CommandLine.arguments.firstIndex(of: "--act"), CommandLine.arguments.count > i + 2, CommandLine.arguments[i + 1] == "start-stack" {
+    let stopped = loadKnown()
+    let levels = StartPlan.levels(startable: stopped.filter { $0.group == CommandLine.arguments[i + 2] && $0.canStart }, pool: stopped)
+    print("plan:", StartPlan.describe(levels))
+    let sem = DispatchSemaphore(value: 0)
+    Task.detached {
+        let failed = await StartPlan.run(levels) { key, text in if let text { print("  \(key.split(separator: "/").last ?? ""): \(text)") } }
+        print(failed.map { "FAILED: \($0.title) :\($0.port)" } ?? "all up")
+        sem.signal()
+    }
+    sem.wait()
+    exit(0)
+}
+
 // Debug helper: `Switchboard --stack` prints who talks to whom.
 if CommandLine.arguments.contains("--stack") {
     let m = Scanner.stack(entries: Scanner.scan())
@@ -102,7 +130,9 @@ if let i = CommandLine.arguments.firstIndex(of: "--screenshot"), CommandLine.arg
             edge("client:1", k("billing-api", 6379), 1),
             StackEdge(from: k("billing-api", 8000), to: "missing:9200", count: 0, hint: "ELASTIC_PORT in .env", configured: true, broken: true),
         ])
-        let store = Store(sample: list, stopped: [stoppedServer], names: ["/Users/dev/dashboard:3001": "Admin app"],
+        let docs = KnownServer(key: "/Users/dev/dashboard:4100", port: 4100, title: "Docusaurus", group: "dashboard",
+                               projectPath: "/Users/dev/dashboard", start: KnownStart(exec: "/usr/bin/true", argv: [], cwd: "/tmp"), containerID: nil, lastSeen: Date())
+        let store = Store(sample: list, stopped: [stoppedServer, docs], names: ["/Users/dev/dashboard:3001": "Admin app"],
                           pinned: [], stack: sampleStack, showMap: CommandLine.arguments.contains("map"))
         _ = NSApplication.shared
         Theme.flat = true

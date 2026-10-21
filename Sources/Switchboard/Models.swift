@@ -82,6 +82,7 @@ struct KnownServer: Codable, Hashable, Identifiable {
     var start: KnownStart?
     var containerID: String?
     var lastSeen: Date
+    var uses: [String]? = nil   // servers this one was seen talking to; decides the start order
     var id: String { key }
     var canStart: Bool { start != nil || containerID != nil }
 }

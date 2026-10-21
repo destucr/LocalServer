@@ -18,7 +18,7 @@ A Mac menu bar app that shows every port you have open, with the project it belo
 - **Grouped by project.** Vite, Next.js, Laravel, Django, Docker, Postgres, Redis and more.
 - **The right button for each server.** Open for web pages, Copy URL for APIs and databases.
 - **See how your servers connect.** The map shows which server talks to which, and warns before you stop something others depend on.
-- **Servers you stopped stay listed** with a Start button.
+- **Servers you stopped stay listed.** One click starts a whole project again, in the order its servers depend on each other.
 - **Port checker.** Type `3000` to see if it is free and who has it.
 
 ## Install

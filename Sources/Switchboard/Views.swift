@@ -266,6 +266,11 @@ struct GroupHeader: View {
             if group.name == "Pinned" { Image(systemName: "pin.fill").font(.system(size: 10)).foregroundStyle(.secondary) }
             Text(group.name).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
             Spacer()
+            if startable > 1 {
+                Button("Start stack") { store.startAll(group) }
+                    .buttonStyle(PillButton(tone: .start, width: 84))
+                    .hoverTip("Start stack: start everything stopped here, in the order they depend on each other", tint: Brand.green)
+            }
             Menu {
                 if let path = group.path {
                     ForEach(Editors.installed, id: \.name) { ed in
@@ -275,7 +280,7 @@ struct GroupHeader: View {
                     Button("Show in Finder") { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
                     Divider()
                 }
-                if startable > 0 { Button("Start \(startable) stopped") { store.startAll(group) } }
+                if startable > 0 { Button(startable > 1 ? "Start stack in order (\(startable))" : "Start 1 stopped") { store.startAll(group) } }
                 if restartable > 0 { Button("Restart \(restartable) running") { store.restartAll(group) } }
                 if stoppable > 0 { Button("Stop all \(stoppable)…") { store.stopAll(group) } }
             } label: {

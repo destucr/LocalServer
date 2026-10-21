@@ -25,6 +25,7 @@ final class Store: ObservableObject {
     @Published private(set) var tip: String?   // what the hovered icon does, shown in the footer
     @Published private(set) var recent: Set<String> = []   // servers that just appeared
     private var knownRunningKeys: Set<String>?
+    private var refreshTick = 0
     @Published var armedKill: String?
     @Published private(set) var names: [String: String] = [:]
     @Published private(set) var pinned: Set<String> = []
@@ -137,7 +138,12 @@ final class Store: ObservableObject {
         let result = await Task.detached(priority: .utility) { Scanner.scan() }.value
         if result != entries { withAnimation(Motion.anim) { entries = result } }
         guard persistent else { return }
-        if showMap { stack = await Task.detached(priority: .utility) { Scanner.stack(entries: result) }.value }
+        refreshTick += 1
+        if showMap || (refreshTick % 5 == 0 && result.filter({ $0.kind != .other }).count >= 2) {
+            let map = await Task.detached(priority: .utility) { Scanner.stack(entries: result) }.value
+            if showMap { stack = map }
+            learn(map)
+        }
         markNew(result)
         remember(result)
         detectStops(result)
@@ -155,6 +161,19 @@ final class Store: ObservableObject {
         Task { try? await Task.sleep(for: .seconds(2)); withAnimation(Motion.anim) { recent.subtract(fresh) } }
     }
 
+    /// Remember who was seen using whom, so the right start order is known later when everything is down.
+    private func learn(_ map: StackMap) {
+        for e in map.edges where !e.broken && (e.count > 0 || e.configured) {
+            guard var from = known[e.from], known[e.to] != nil else { continue }
+            var uses = Set(from.uses ?? [])
+            if uses.insert(e.to).inserted {
+                from.uses = uses.sorted()
+                known[e.from] = from
+                dirty = true
+            }
+        }
+    }
+
     private func remember(_ list: [PortEntry]) {
         let now = Date()
         let runningKeys = Set(list.map(\.key))
@@ -162,7 +181,7 @@ final class Store: ObservableObject {
         for e in list where e.kind == .dev || e.kind == .docker {
             let k = KnownServer(key: e.key, port: e.port, title: e.title, group: e.group, projectPath: e.projectPath,
                                 start: e.restart.map { KnownStart(exec: $0.exec, argv: $0.argv, cwd: $0.cwd) },
-                                containerID: e.container?.id, lastSeen: now)
+                                containerID: e.container?.id, lastSeen: now, uses: known[e.key]?.uses)
             var old = known[e.key]
             old?.lastSeen = now
             if old != k { dirty = true }
@@ -423,10 +442,23 @@ final class Store: ObservableObject {
         }
     }
 
+    /// Start everything that is stopped in this project, dependencies first, waiting for each tier to come up.
     func startAll(_ g: ProjectGroup) {
-        let targets = g.stopped.filter(\.canStart)
-        guard !targets.isEmpty else { return }
-        for k in targets { start(k) }
+        let startable = g.stopped.filter(\.canStart)
+        guard !startable.isEmpty else { return }
+        let levels = StartPlan.levels(startable: startable, pool: stopped)
+        let plan = StartPlan.describe(levels)
+        flash(levels.count > 1 ? "Starting in order: \(plan)" : "Starting \(plan)…")
+        Task {
+            let failed = await StartPlan.run(levels) { key, text in Task { @MainActor in self.busy[key] = text } }
+            try? await Task.sleep(for: .milliseconds(400))
+            await refresh()
+            if let f = failed {
+                flash("\(f.title) :\(f.port) didn't come up within a minute, so nothing after it was started. Check ~/Library/Logs/Switchboard.")
+            } else {
+                flash(levels.count > 1 ? "Stack is up: \(plan)" : "\(plan) is up.")
+            }
+        }
     }
 
     func openProject(_ path: String, in app: URL) { Editors.open(path, with: app) }
