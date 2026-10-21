@@ -10,6 +10,7 @@ final class TipWindow {
     private let panel: NSPanel
     private let label = NSTextField(wrappingLabelWithString: "")
     private var pending: DispatchWorkItem?
+    private var dismissedAt: Date?   // a click dismissed the tip; it stays away until the pointer leaves, or for a second at most
 
     private init() {
         panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
@@ -36,16 +37,23 @@ final class TipWindow {
         label.preferredMaxLayoutWidth = 300
         bubble.addSubview(label)
         panel.contentView = bubble
+        // The bubble floats above menus. A click opens one, so the tip gets out of its way.
+        NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] ev in
+            MainActor.assumeIsolated { self?.dismissedAt = Date(); self?.panel.orderOut(nil); self?.pending?.cancel() }
+            return ev
+        }
     }
 
     func show(_ text: String, delay: Double = 0.3) {
         pending?.cancel()
+        if let t = dismissedAt, Date().timeIntervalSince(t) < 1 { return }
         let work = DispatchWorkItem { [weak self] in self?.present(text) }
         pending = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     func hide() {
+        dismissedAt = nil
         pending?.cancel()
         panel.orderOut(nil)
     }
