@@ -5,7 +5,11 @@ A Mac menu bar app that shows every port you have open, with the project it belo
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
-    <img src="docs/screenshot-light.png" width="470" alt="Switchboard popover listing ports grouped by project">
+    <img src="docs/screenshot-light.png" width="380" alt="Switchboard listing ports grouped by project">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-map-dark.png">
+    <img src="docs/screenshot-map-light.png" width="380" alt="Switchboard map of how servers connect">
   </picture>
 </p>
 
@@ -13,6 +17,7 @@ A Mac menu bar app that shows every port you have open, with the project it belo
 
 - **Grouped by project.** Vite, Next.js, Laravel, Django, Docker, Postgres, Redis and more.
 - **The right button for each server.** Open for web pages, Copy URL for APIs and databases.
+- **See how your servers connect.** The map shows which server talks to which, and warns before you stop something others depend on.
 - **Servers you stopped stay listed** with a Start button.
 - **Port checker.** Type `3000` to see if it is free and who has it.
 

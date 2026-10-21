@@ -89,7 +89,7 @@ enum Scanner {
 
     // MARK: Per-process description
 
-    private static func describe(pid: Int32, now: Int) -> PortEntry {
+    static func describe(pid: Int32, now: Int) -> PortEntry {
         let ae = Proc.argsEnv(pid)
         let exec = ae?.exec ?? Proc.path(pid) ?? "?"
         let argv = ae?.argv ?? [exec]

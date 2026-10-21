@@ -84,6 +84,9 @@ struct RootView: View {
             header
             Divider()
             VStack(spacing: 0) {
+                if store.showMap {
+                    StackMapView()
+                } else {
                 if let port = store.portQuery { PortCard(port: port) }
                 if store.groups.isEmpty {
                     if store.portQuery == nil {
@@ -104,6 +107,7 @@ struct RootView: View {
                             }
                         }
                     }
+                }
                 }
             }
             .frame(height: listHeight)
@@ -139,6 +143,12 @@ struct RootView: View {
                 .textFieldStyle(.plain)
                 .focused($filterFocused)
                 .onSubmit { if let first = store.visible.first { store.primary(first) } }
+            Picker("View", selection: $store.showMap) {
+                Image(systemName: "list.bullet").tag(false)
+                Image(systemName: "point.3.connected.trianglepath.dotted").tag(true)
+            }
+            .pickerStyle(.segmented).labelsHidden().frame(width: 78)
+            .tip(store.showMap ? "Map: how your servers connect. Switch to the list" : "List: your servers by project. Switch to the map")
             Button { Task { await store.refresh() } } label: { Image(systemName: "arrow.clockwise") }
                 .buttonStyle(.borderless).tip("Rescan: check for new or stopped servers now")
         }

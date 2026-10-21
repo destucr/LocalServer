@@ -17,6 +17,15 @@ if let i = CommandLine.arguments.firstIndex(of: "--tip"), CommandLine.arguments.
     exit(0)
 }
 
+// Debug helper: `Switchboard --stack` prints who talks to whom.
+if CommandLine.arguments.contains("--stack") {
+    let m = Scanner.stack(entries: Scanner.scan())
+    for n in m.nodes { print("node \(n.id)\t\(n.role)\t:\(n.port.map(String.init) ?? "-")\t\(n.title)\t[\(n.project ?? "-")]") }
+    for e in m.edges { print("edge \(e.from) -> \(e.to)\tconns=\(e.count)\tconfigured=\(e.configured)\tbroken=\(e.broken)\t\(e.hint ?? "")") }
+    print("layers:", m.layers().sorted { $0.key < $1.key }.map { "\($0.key.split(separator: ":").last ?? ""):\($0.value)" }.joined(separator: " "))
+    exit(0)
+}
+
 // Debug helper: `Switchboard --contrast` prints the extra tint chosen for a few wallpapers.
 if CommandLine.arguments.contains("--contrast") { Backdrop.report(); exit(0) }
 
@@ -80,8 +89,21 @@ if let i = CommandLine.arguments.firstIndex(of: "--screenshot"), CommandLine.arg
         let stoppedServer = KnownServer(key: "/Users/dev/dashboard:4000", port: 4000, title: "Storybook", group: "dashboard",
                                         projectPath: "/Users/dev/dashboard",
                                         start: KnownStart(exec: "/usr/bin/true", argv: [], cwd: "/tmp"), containerID: nil, lastSeen: Date())
+        // A sample stack for the map: three front ends call the API, the API uses Postgres and Redis, and a .env points at a port nobody listens on.
+        func k(_ group: String, _ port: Int) -> String { "/Users/dev/\(group):\(port)" }
+        var nodes = list.map { StackNode(id: $0.key, role: .server, port: $0.port, title: $0.title, project: $0.projectName, status: $0.status, entryID: $0.id) }
+        nodes.append(StackNode(id: "client:1", role: .client, port: nil, title: "Queue worker", project: "billing-api", status: nil, entryID: nil))
+        nodes.append(StackNode(id: "missing:9200", role: .missing, port: 9200, title: "Nothing here", project: nil, status: nil, entryID: nil))
+        func edge(_ f: String, _ t: String, _ n: Int) -> StackEdge { StackEdge(from: f, to: t, count: n, hint: nil, configured: false, broken: false) }
+        let sampleStack = StackMap(nodes: nodes, edges: [
+            edge(k("storefront", 5173), k("billing-api", 8000), 3), edge(k("dashboard", 3000), k("billing-api", 8000), 2),
+            edge(k("dashboard", 3001), k("billing-api", 8000), 1), edge(k("billing-api", 8000), k("billing-api", 5432), 4),
+            edge(k("billing-api", 8000), k("billing-api", 6379), 2), edge("client:1", k("billing-api", 5432), 2),
+            edge("client:1", k("billing-api", 6379), 1),
+            StackEdge(from: k("billing-api", 8000), to: "missing:9200", count: 0, hint: "ELASTIC_PORT in .env", configured: true, broken: true),
+        ])
         let store = Store(sample: list, stopped: [stoppedServer], names: ["/Users/dev/dashboard:3001": "Admin app"],
-                          pinned: [])
+                          pinned: [], stack: sampleStack, showMap: CommandLine.arguments.contains("map"))
         _ = NSApplication.shared
         Theme.flat = true
         let look = NSAppearance(named: dark ? .darkAqua : .aqua)

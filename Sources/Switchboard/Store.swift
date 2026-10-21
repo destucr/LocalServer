@@ -14,6 +14,8 @@ final class Store: ObservableObject {
     @Published private(set) var entries: [PortEntry] = []
     @Published private(set) var stopped: [KnownServer] = []
     @Published var query = ""
+    @Published private(set) var stack = StackMap.empty
+    @Published var showMap: Bool { didSet { UserDefaults.standard.set(showMap, forKey: "showMap"); if showMap { Task { await refresh() } } } }
     @Published var showAll = false
     @Published var message: String?
     @Published var busy: [String: String] = [:]   // row key → what it is doing, e.g. "Restarting…"
@@ -46,11 +48,13 @@ final class Store: ObservableObject {
     private var expectedStops: [String: Date] = [:]
 
     /// Fixed sample data, no polling, no disk. Used for README screenshots.
-    init(sample: [PortEntry], stopped: [KnownServer] = [], names: [String: String] = [:], pinned: Set<String> = []) {
+    init(sample: [PortEntry], stopped: [KnownServer] = [], names: [String: String] = [:], pinned: Set<String> = [], stack: StackMap = .empty, showMap: Bool = false) {
         persistent = false
         showStopped = true
         notifyOnStop = false
         entries = sample
+        self.stack = stack
+        self.showMap = showMap
         self.stopped = stopped
         self.names = names
         self.pinned = pinned
@@ -59,6 +63,7 @@ final class Store: ObservableObject {
     init() {
         persistent = true
         let d = UserDefaults.standard
+        showMap = d.bool(forKey: "showMap")
         showStopped = d.bool(forKey: "showStopped")
         notifyOnStop = d.object(forKey: "notifyOnStop") as? Bool ?? true
         load()
@@ -132,6 +137,7 @@ final class Store: ObservableObject {
         let result = await Task.detached(priority: .utility) { Scanner.scan() }.value
         if result != entries { withAnimation(Motion.anim) { entries = result } }
         guard persistent else { return }
+        if showMap { stack = await Task.detached(priority: .utility) { Scanner.stack(entries: result) }.value }
         markNew(result)
         remember(result)
         detectStops(result)
@@ -290,8 +296,18 @@ final class Store: ObservableObject {
             return
         }
         armedKill = nil
-        expectedStops[e.key] = Date()
-        perform(e.key, label: "Stopping…", success: "Stopped :\(e.port). Press Start to bring it back.") { try await Actions.kill(e) }
+        Task {
+            // Magic moment: if other running servers are connected to this one, say so before pulling the plug.
+            let snapshot = entries
+            let map = await Task.detached(priority: .userInitiated) { Scanner.stack(entries: snapshot) }.value
+            let users = map.usedBy(e.key).filter { $0.role != .missing }
+            if !users.isEmpty {
+                let list = users.map { "\($0.title)\($0.port.map { " :\($0)" } ?? "")" + ($0.project.map { "  (\($0))" } ?? "") }.joined(separator: "\n")
+                guard Dialogs.confirm("\(users.count) running server\(users.count == 1 ? " uses" : "s use") \(displayName(e))", list + "\n\nThey will lose their connection if you stop it.", ok: "Stop anyway") else { return }
+            }
+            expectedStops[e.key] = Date()
+            perform(e.key, label: "Stopping…", success: "Stopped :\(e.port). Press Start to bring it back.") { try await Actions.kill(e) }
+        }
     }
 
     func restart(_ e: PortEntry) {
