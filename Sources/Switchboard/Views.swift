@@ -145,7 +145,7 @@ struct RootView: View {
             footer
         }
         .frame(width: 470)
-        .tint(Brand.primary)
+        .tint(Brand.primaryText)   // the brighter lavender in dark mode, so tinted icons stay visible
         .background { if !Theme.flat { Rectangle().fill(scheme == .dark ? Color(white: 0.10) : Color.white).opacity(store.backdropTint) } }
         .background { if let m = Theme.matte { Rectangle().fill(m) } }
         .onReceive(NotificationCenter.default.publisher(for: .popoverDidShow)) { _ in
@@ -218,7 +218,7 @@ struct RootView: View {
                     Button("Quit Switchboard") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")
                 } label: {
                     Image(systemName: "gearshape")
-                        .overlay(alignment: .topTrailing) { if store.update != nil { Circle().fill(Brand.primary).frame(width: 7, height: 7).offset(x: 3, y: -2) } }
+                        .overlay(alignment: .topTrailing) { if store.update != nil { Circle().fill(Brand.primaryText).frame(width: 7, height: 7).offset(x: 3, y: -2) } }
                 }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             }

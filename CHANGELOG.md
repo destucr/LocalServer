@@ -4,6 +4,9 @@ All notable changes to Switchboard. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Fixed
+- Icon buttons were hard to see in dark mode. They use a lighter purple there now.
+
 ## [1.8.0] - 2026-10-22
 
 ### Added

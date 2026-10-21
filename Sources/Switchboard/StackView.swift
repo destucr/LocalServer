@@ -262,7 +262,7 @@ private struct NodeView: View {
                 }
             }
             .overlay {
-                if selected { RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(Brand.primary, lineWidth: 2.5).padding(-4) }
+                if selected { RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(Brand.primaryText, lineWidth: 2.5).padding(-4) }
             }
 
             VStack(spacing: 0) {
