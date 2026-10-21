@@ -49,6 +49,8 @@ struct PillButton: ButtonStyle {
             .frame(width: width, height: 22)
             .background(tone.fill.opacity(configuration.isPressed ? 0.75 : 1), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .opacity(enabled ? 1 : 0.45)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(Motion.press, value: configuration.isPressed)
     }
 }
 
@@ -86,8 +88,9 @@ struct RootView: View {
             Divider()
             VStack(spacing: 0) {
                 if store.showMap {
-                    StackMapView()
+                    StackMapView().transition(Motion.reduced ? .opacity : .move(edge: .trailing))
                 } else {
+                VStack(spacing: 0) {
                 if let port = store.portQuery { PortCard(port: port) }
                 if store.groups.isEmpty {
                     if store.portQuery == nil {
@@ -100,8 +103,8 @@ struct RootView: View {
                         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                             ForEach(store.groups) { g in
                                 Section {
-                                    ForEach(g.running) { RowView(entry: $0).id($0.key).transition(.opacity.combined(with: .move(edge: .top))) }
-                                    ForEach(g.stopped) { StoppedRow(server: $0).id($0.key).transition(.opacity) }
+                                    ForEach(g.running) { RowView(entry: $0).id($0.key).transition(.rowIn) }
+                                    ForEach(g.stopped) { StoppedRow(server: $0).id($0.key).transition(.stoppedIn) }
                                 } header: {
                                     GroupHeader(group: g)
                                 }
@@ -110,8 +113,12 @@ struct RootView: View {
                     }
                 }
                 }
+                .transition(Motion.reduced ? .opacity : .move(edge: .leading))
+                }
             }
             .frame(height: listHeight)
+            .clipped()
+            .animation(Motion.anim, value: store.showMap)
             .overlay(alignment: .bottom) {
                 if let m = store.message {
                     HStack(spacing: 10) {
@@ -124,10 +131,10 @@ struct RootView: View {
                     .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.14)))
                     .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
                     .padding(8)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(.sheet(from: .bottom))
                 }
             }
-            .animation(Motion.anim, value: store.message)
+            .animation(Motion.pop, value: store.message)
             Divider()
             footer
         }
@@ -590,6 +597,16 @@ extension View {
     func hoverTip(_ text: String, tint: Color = .primary) -> some View { modifier(HoverTip(text: text, tint: tint)) }
 }
 
+/// Borderless look with a small press-in, so a click is felt before anything else changes.
+struct PressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .scaleEffect(configuration.isPressed ? 0.9 : 1)
+            .animation(Motion.press, value: configuration.isPressed)
+    }
+}
+
 struct IconButton: View {
     let symbol: String
     let help: String
@@ -602,7 +619,7 @@ struct IconButton: View {
             Image(systemName: symbol).frame(width: 24, height: 24).contentShape(Rectangle())
                 .foregroundStyle(tint ?? (enabled ? Color.primary : Color.secondary.opacity(0.5)))
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(PressStyle())
         .hoverTip(help, tint: tint ?? Brand.primary)
     }
 }

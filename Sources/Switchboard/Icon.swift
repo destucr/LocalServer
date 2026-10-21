@@ -85,8 +85,39 @@ enum IconArt {
 }
 
 enum Motion {
+    static var reduced: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    /// Layout and state changes. A spring keeps its velocity when interrupted, so quick toggles stay smooth.
     /// Animations are skipped when the system asks for reduced motion.
-    static var anim: Animation? {
-        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .smooth(duration: 0.25)
+    static var anim: Animation? { reduced ? nil : .spring(response: 0.34, dampingFraction: 0.86) }
+
+    /// Things that arrive: a little overshoot makes them feel placed rather than faded in.
+    static var pop: Animation? { reduced ? nil : .spring(response: 0.36, dampingFraction: 0.74) }
+
+    /// Press feedback.
+    static var press: Animation? { reduced ? nil : .snappy(duration: 0.14) }
+}
+
+/// Spatial transitions: things move from where they come from instead of dissolving. Reduce Motion falls back to a plain fade.
+extension AnyTransition {
+    /// A new running row drops in from the top edge of its section and settles.
+    static var rowIn: AnyTransition {
+        Motion.reduced ? .opacity : .asymmetric(
+            insertion: .scale(scale: 0.92, anchor: .top).combined(with: .offset(y: -10)).combined(with: .opacity),
+            removal: .scale(scale: 0.96, anchor: .leading).combined(with: .offset(x: -24)).combined(with: .opacity))
+    }
+    /// A stopped row slides in from the side where the running row was.
+    static var stoppedIn: AnyTransition {
+        Motion.reduced ? .opacity : .asymmetric(
+            insertion: .offset(x: 24).combined(with: .scale(scale: 0.96, anchor: .trailing)).combined(with: .opacity),
+            removal: .offset(x: 24).combined(with: .opacity))
+    }
+    /// Panels that slide in from an edge, like the Undo bar and the map's detail card.
+    static func sheet(from edge: Edge) -> AnyTransition {
+        Motion.reduced ? .opacity : .move(edge: edge).combined(with: .scale(scale: 0.97, anchor: edge == .bottom ? .bottom : .top)).combined(with: .opacity)
+    }
+    /// A map node pops in at its place.
+    static var node: AnyTransition {
+        Motion.reduced ? .opacity : .scale(scale: 0.5).combined(with: .opacity)
     }
 }

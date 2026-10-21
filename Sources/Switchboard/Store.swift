@@ -162,7 +162,7 @@ final class Store: ObservableObject {
         refreshTick += 1
         if showMap || (refreshTick % 5 == 0 && result.filter({ $0.kind != .other }).count >= 2) {
             let map = await Task.detached(priority: .utility) { Scanner.stack(entries: result) }.value
-            if showMap { stack = map }
+            if showMap { withAnimation(Motion.pop) { stack = map } }
             learn(map)
         }
         markNew(result)
@@ -249,7 +249,7 @@ final class Store: ObservableObject {
         syncDeclared(roots: Set(projects).union(known.values.compactMap(\.projectPath)).union(list.compactMap(\.projectPath)))
         let s = Self.merge(known: known, declared: declared, running: runningKeys)
             .sorted { ($0.group.lowercased(), $0.port) < ($1.group.lowercased(), $1.port) }
-        if s != stopped { stopped = s }
+        if s != stopped { withAnimation(Motion.anim) { stopped = s } }
     }
 
     /// What we know about a server while it is alive, so we can explain it once it is gone.

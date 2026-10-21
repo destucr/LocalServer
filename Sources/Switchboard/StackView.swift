@@ -69,6 +69,7 @@ struct StackMapView: View {
                     ForEach(map.nodes) { n in
                         if let p = points[n.id] {
                             NodeView(node: n, map: map, selected: selected == n.id, dimmed: dimmed(n, map), width: layout.nodeW, tile: tile)
+                                .transition(.node)
                                 .onTapGesture { selected = selected == n.id ? nil : n.id }
                                 .gesture(
                                     DragGesture(minimumDistance: 4, coordinateSpace: .named("map"))
@@ -113,7 +114,8 @@ struct StackMapView: View {
                 )
                 .clipped()
                 .overlay(alignment: .topTrailing) { MapControls() }
-                .overlay(alignment: .bottom) { if let id = selected, let n = map.node(id) { DetailCard(node: n, map: map, close: { selected = nil }) } }
+                .overlay(alignment: .bottom) { if let id = selected, let n = map.node(id) { DetailCard(node: n, map: map, close: { selected = nil }).transition(.sheet(from: .bottom)) } }
+                .animation(Motion.pop, value: selected)
                 .overlay(alignment: .bottomLeading) { if selected == nil { Legend().padding(.horizontal, 12).padding(.bottom, 2) } }
             }
             .padding(.vertical, 8)
