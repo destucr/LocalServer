@@ -7,7 +7,7 @@ if CommandLine.arguments.contains("--scan") {
     }
     exit(0)
 }
-// Debug helper: `LocalServer --tip "text"` shows the tooltip bubble for a few seconds.
+// Debug helper: `Switchboard --tip "text"` shows the tooltip bubble for a few seconds.
 if let i = CommandLine.arguments.firstIndex(of: "--tip"), CommandLine.arguments.count > i + 1 {
     MainActor.assumeIsolated {
         _ = NSApplication.shared
@@ -17,20 +17,20 @@ if let i = CommandLine.arguments.firstIndex(of: "--tip"), CommandLine.arguments.
     exit(0)
 }
 
-// Debug helper: `LocalServer --contrast` prints the extra tint chosen for a few wallpapers.
+// Debug helper: `Switchboard --contrast` prints the extra tint chosen for a few wallpapers.
 if CommandLine.arguments.contains("--contrast") { Backdrop.report(); exit(0) }
 
-// Build helper: `LocalServer --icon out.png` draws the app icon.
+// Build helper: `Switchboard --icon out.png` draws the app icon.
 if let i = CommandLine.arguments.firstIndex(of: "--icon"), CommandLine.arguments.count > i + 1 {
     _ = NSApplication.shared
     try? IconArt.appIcon().representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
     exit(0)
 }
 
-// Debug helper: `LocalServer --act start <port>` starts a remembered (stopped) server from the saved state.
+// Debug helper: `Switchboard --act start <port>` starts a remembered (stopped) server from the saved state.
 if let i = CommandLine.arguments.firstIndex(of: "--act"), CommandLine.arguments.count > i + 2,
    CommandLine.arguments[i + 1] == "start", let port = Int(CommandLine.arguments[i + 2]) {
-    let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("LocalServer/state.json")
+    let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Switchboard/state.json")
     struct S: Codable { var known: [String: KnownServer] }
     guard let data = try? Data(contentsOf: url), let st = try? JSONDecoder().decode(S.self, from: data),
           let k = st.known.values.first(where: { $0.port == port }) else { print("nothing remembered for \(port)"); exit(1) }
@@ -43,7 +43,7 @@ if let i = CommandLine.arguments.firstIndex(of: "--act"), CommandLine.arguments.
     exit(0)
 }
 
-// Debug helper: `LocalServer --act kill|restart <port>`
+// Debug helper: `Switchboard --act kill|restart <port>`
 if let i = CommandLine.arguments.firstIndex(of: "--act"), CommandLine.arguments.count > i + 2,
    let port = Int(CommandLine.arguments[i + 2]) {
     let verb = CommandLine.arguments[i + 1]
@@ -58,7 +58,7 @@ if let i = CommandLine.arguments.firstIndex(of: "--act"), CommandLine.arguments.
     if let log = Actions.logFile(for: e) { print("log:", log) }
     exit(0)
 }
-// Debug helper: `LocalServer --screenshot out.png [dark]` renders the popover with sample data.
+// Debug helper: `Switchboard --screenshot out.png [dark]` renders the popover with sample data.
 if let i = CommandLine.arguments.firstIndex(of: "--screenshot"), CommandLine.arguments.count > i + 1 {
     let outPath = CommandLine.arguments[i + 1]
     let dark = CommandLine.arguments.contains("dark")
@@ -212,6 +212,7 @@ if let i = CommandLine.arguments.firstIndex(of: "--screenshot"), CommandLine.arg
     }
     exit(0)
 }
+Migration.run()
 MainActor.assumeIsolated {
     let app = NSApplication.shared
     let delegate = AppDelegate()

@@ -1,11 +1,11 @@
-# LocalServer
+# Switchboard
 
 A Mac menu bar app that shows every port you have open, with the project it belongs to. Open, restart, read logs, share or stop any of them in one click.
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
-    <img src="docs/screenshot-light.png" width="470" alt="LocalServer popover listing ports grouped by project">
+    <img src="docs/screenshot-light.png" width="470" alt="Switchboard popover listing ports grouped by project">
   </picture>
 </p>
 
@@ -19,10 +19,10 @@ A Mac menu bar app that shows every port you have open, with the project it belo
 ## Install
 
 ```sh
-brew install --cask destucr/tap/localserver
+brew install --cask destucr/tap/switchboard
 ```
 
-Or download the zip from [Releases](https://github.com/destucr/LocalServer/releases). The app is not notarized yet, so right click it and choose Open the first time.
+Or download the zip from [Releases](https://github.com/destucr/Switchboard/releases). The app is not notarized yet, so right click it and choose Open the first time.
 
 ## Build
 

@@ -67,7 +67,7 @@ enum Actions {
 
     /// One log file per server, appended to. A restarted or started server writes here, so Logs can follow it.
     private static func openLog(_ name: String, _ port: Int, label: String) throws -> FileHandle {
-        let dir = NSHomeDirectory() + "/Library/Logs/LocalServer"
+        let dir = NSHomeDirectory() + "/Library/Logs/Switchboard"
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         let slug = name.lowercased().map { $0.isLetter || $0.isNumber ? String($0) : "-" }.joined()
         let path = "\(dir)/\(slug)-\(port).log"
@@ -87,7 +87,7 @@ enum Actions {
             if r.status != 0 { throw ActionError.message("docker start failed. Was the container removed?") }
             return
         }
-        guard let s = k.start else { throw ActionError.message("LocalServer doesn't know how this was started") }
+        guard let s = k.start else { throw ActionError.message("Switchboard doesn't know how this was started") }
         guard FileManager.default.fileExists(atPath: s.cwd) else { throw ActionError.message("The folder is gone: \(abbreviateHome(s.cwd))") }
         let log = try openLog(k.group, k.port, label: "started")
         let cmd = ([s.exec] + s.argv.dropFirst()).map(shellQuote).joined(separator: " ")
@@ -140,7 +140,7 @@ enum Actions {
     }
 
     private static func openTerminal(title: String, command: String) {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("localserver-\(UUID().uuidString.prefix(8)).command")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("switchboard-\(UUID().uuidString.prefix(8)).command")
         let script = "#!/bin/zsh\nprintf '\\033]0;%s\\007' \(shellQuote(title))\nexec \(command)\n"
         try? script.write(to: url, atomically: true, encoding: .utf8)
         try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)

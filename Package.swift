@@ -2,9 +2,9 @@
 import PackageDescription
 
 let package = Package(
-    name: "LocalServer",
+    name: "Switchboard",
     platforms: [.macOS(.v14)],
     targets: [
-        .executableTarget(name: "LocalServer", path: "Sources/LocalServer")
+        .executableTarget(name: "Switchboard", path: "Sources/Switchboard")
     ]
 )

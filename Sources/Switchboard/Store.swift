@@ -196,7 +196,7 @@ final class Store: ObservableObject {
     // MARK: Persistence
 
     private var stateURL: URL {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("LocalServer")
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Switchboard")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("state.json")
     }
@@ -257,7 +257,7 @@ final class Store: ObservableObject {
             switch ch {
             case "o": e.web == .none ? copyLocal(e) : open(e)
             case "c": copyLocal(e)
-            case "r": if e.container != nil || e.restart != nil { restart(e) } else { flash("LocalServer can't restart this one. It doesn't know how it was started.") }
+            case "r": if e.container != nil || e.restart != nil { restart(e) } else { flash("Switchboard can't restart this one. It doesn't know how it was started.") }
             case "l": tail(e)
             case "p": togglePin(e)
             default: return false
@@ -297,7 +297,7 @@ final class Store: ObservableObject {
     func restart(_ e: PortEntry) {
         expectedStops[e.key] = Date()
         perform(e.key, label: "Restarting…",
-                success: e.container == nil ? "Restarted :\(e.port). Its output is saved in ~/Library/Logs/LocalServer, so Logs works now." : "Restarted :\(e.port)") {
+                success: e.container == nil ? "Restarted :\(e.port). Its output is saved in ~/Library/Logs/Switchboard, so Logs works now." : "Restarted :\(e.port)") {
             try await Actions.restart(e)
         }
     }

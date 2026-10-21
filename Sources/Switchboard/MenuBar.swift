@@ -4,7 +4,7 @@ import Combine
 import SwiftUI
 
 extension Notification.Name {
-    static let popoverDidShow = Notification.Name("LocalServer.popoverDidShow")
+    static let popoverDidShow = Notification.Name("Switchboard.popoverDidShow")
 }
 
 /// Global hotkey via Carbon (needs no accessibility permission).
@@ -91,7 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let n = store.count
         item.button?.image = IconArt.menuBar(active: n > 0)
         item.button?.title = n > 0 ? " \(n)" : ""
-        item.button?.setAccessibilityLabel("LocalServer, \(n) running")
+        item.button?.setAccessibilityLabel("Switchboard, \(n) running")
     }
 
     @objc private func toggle() {

@@ -82,7 +82,7 @@ enum Backdrop {
 
     static var tintColor: (light: NSColor, dark: NSColor) { (NSColor(white: tintGray.light, alpha: 1), NSColor(white: tintGray.dark, alpha: 1)) }
 
-    /// `LocalServer --contrast`: prints the tint chosen for a few wallpapers.
+    /// `Switchboard --contrast`: prints the tint chosen for a few wallpapers.
     static func report() {
         for dark in [false, true] {
             print(dark ? "dark popover" : "light popover")

@@ -34,7 +34,7 @@ enum Probe {
             let t0 = DispatchTime.now()
             guard let fd = connectLoopback(port: port, v6: v6) else { continue }
             defer { close(fd) }
-            let req = "GET / HTTP/1.0\r\nHost: localhost:\(port)\r\nAccept: text/html,*/*\r\nUser-Agent: LocalServer\r\nConnection: close\r\n\r\n"
+            let req = "GET / HTTP/1.0\r\nHost: localhost:\(port)\r\nAccept: text/html,*/*\r\nUser-Agent: Switchboard\r\nConnection: close\r\n\r\n"
             guard send(fd, req, req.utf8.count, 0) > 0 else { return ProbeResult(kind: .none, status: nil, ms: nil) }
 
             var data = Data()

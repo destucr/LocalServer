@@ -1,16 +1,16 @@
 #!/bin/zsh
-# Builds LocalServer.app. Usage: ./build.sh [run|install|release]
+# Builds Switchboard.app. Usage: ./build.sh [run|install|release]
 # Version comes from the VERSION file; build number is the git commit count.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 swift build -c release
-BIN="$(swift build -c release --show-bin-path)/LocalServer"
+BIN="$(swift build -c release --show-bin-path)/Switchboard"
 
-APP="build/LocalServer.app"
+APP="build/Switchboard.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/LocalServer"
+cp "$BIN" "$APP/Contents/MacOS/Switchboard"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 VERSION="$(tr -d '[:space:]' < VERSION)"
 BUILD="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
@@ -28,10 +28,10 @@ codesign --force --sign - "$APP" >/dev/null
 echo "Built $APP (v$VERSION, build $BUILD)"
 
 case "${1:-}" in
-  run)     pkill -x LocalServer 2>/dev/null || true; open "$APP" ;;
-  release) (cd build && rm -f LocalServer-$VERSION.zip && ditto -c -k --keepParent LocalServer.app LocalServer-$VERSION.zip)
-           echo "Zipped build/LocalServer-$VERSION.zip" ;;
-  install) pkill -x LocalServer 2>/dev/null || true
-           rm -rf /Applications/LocalServer.app; cp -R "$APP" /Applications/; open /Applications/LocalServer.app
+  run)     pkill -x Switchboard 2>/dev/null || true; pkill -x LocalServer 2>/dev/null || true; open "$APP" ;;
+  release) (cd build && rm -f Switchboard-$VERSION.zip && ditto -c -k --keepParent Switchboard.app Switchboard-$VERSION.zip)
+           echo "Zipped build/Switchboard-$VERSION.zip" ;;
+  install) pkill -x Switchboard 2>/dev/null || true
+           rm -rf /Applications/Switchboard.app /Applications/LocalServer.app; cp -R "$APP" /Applications/; open /Applications/Switchboard.app
            echo "Installed to /Applications" ;;
 esac

@@ -161,7 +161,7 @@ struct RootView: View {
                 }
                 Spacer()
                 Menu {
-                    Button("About LocalServer \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")") {
+                    Button("About Switchboard \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")") {
                         NSApp.activate(ignoringOtherApps: true)
                         NSApp.orderFrontStandardAboutPanel(nil)
                     }
@@ -172,7 +172,7 @@ struct RootView: View {
                     Toggle("Show system & apps", isOn: $store.showAll)
                     Toggle("Launch at login", isOn: Binding(get: { store.launchAtLogin }, set: { store.launchAtLogin = $0 }))
                     Divider()
-                    Button("Quit LocalServer") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")
+                    Button("Quit Switchboard") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")
                 } label: { Image(systemName: "gearshape") }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             }
@@ -228,7 +228,7 @@ struct PortCard: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(inUse ? "Port \(String(port)) is in use" : "Port \(String(port)) is free").font(.system(size: 13, weight: .semibold))
                 Text(!inUse ? "Go ahead and start your server"
-                     : owners.isEmpty ? "Held by a process LocalServer can't see. Next free port is \(String(next))."
+                     : owners.isEmpty ? "Held by a process Switchboard can't see. Next free port is \(String(next))."
                      : "Stop it below to free the port. Next free port is \(String(next)).")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -383,7 +383,7 @@ struct RowView: View {
             if entry.web == .page {
                 IconButton(symbol: "doc.on.doc", help: "Copy link: put \(entry.address) on your clipboard  (⌘C)") { store.copyLocal(entry) }
             }
-            IconButton(symbol: "arrow.clockwise", help: canRestart ? "Restart: stop it and run the same command again  (⌘R)" : "Restart isn't available: LocalServer didn't see how this was started")
+            IconButton(symbol: "arrow.clockwise", help: canRestart ? "Restart: stop it and run the same command again  (⌘R)" : "Restart isn't available: Switchboard didn't see how this was started")
                 { store.restart(entry) }
                 .disabled(!canRestart)
             IconButton(symbol: "terminal", help: "Logs: follow this server's output in Terminal  (⌘L)") { store.tail(entry) }
