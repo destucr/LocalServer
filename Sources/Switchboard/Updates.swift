@@ -71,7 +71,7 @@ enum Updates {
         await Task.detached {
             let r = runCapture(brew, ["upgrade", "--cask", "destucr/tap/switchboard"], timeout: 300)
             let installed = (NSDictionary(contentsOfFile: "/Applications/Switchboard.app/Contents/Info.plist")?["CFBundleShortVersionString"] as? String) ?? ""
-            if installed == version { return nil }
+            if installed == version || isNewer(installed, than: version) { return nil }   // a newer release may have landed since the check
             if r.status != 0 {
                 let last = r.out.split(separator: "\n").last.map(String.init) ?? ""
                 return "Homebrew could not update it. \(last)".trimmingCharacters(in: .whitespaces)

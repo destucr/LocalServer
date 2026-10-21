@@ -4,6 +4,9 @@ All notable changes to Switchboard. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Fixed
+- Updating no longer reports a problem when an even newer version was released since the last check.
+
 ## [1.8.2] - 2026-10-22
 
 ### Fixed
