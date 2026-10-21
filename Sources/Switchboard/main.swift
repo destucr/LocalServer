@@ -495,6 +495,25 @@ if let i = CommandLine.arguments.firstIndex(of: "--screenshot"), CommandLine.arg
                                projectPath: "/Users/dev/dashboard", start: KnownStart(exec: "/usr/bin/true", argv: [], cwd: "/tmp"), containerID: nil, lastSeen: Date())
         let store = Store(sample: list, stopped: [stoppedServer, docs], names: ["/Users/dev/dashboard:3001": "Admin app"],
                           pinned: [], stack: sampleStack, showMap: CommandLine.arguments.contains("map"))
+        if CommandLine.arguments.contains("logs") {
+            let t = LogTail(source: .file("/Users/dev/billing-api/storage/logs/laravel.log"), title: "Laravel :8000", key: list[3].key)
+            t.preload("""
+            --- started Tue Oct 20 09:14:02 2026 ---
+            09:14:03 INFO  Booting the application
+            09:14:03 INFO  Listening on http://127.0.0.1:8000
+            09:14:21 GET  /api/invoices 200 41ms
+            09:14:22 GET  /api/customers/42 200 18ms
+            09:14:30 WARN  Slow query on invoices took 912ms
+            09:14:31 GET  /api/invoices?page=2 200 953ms
+            09:14:44 POST /api/payments 500 120ms
+            09:14:44 ERROR Payments gateway refused the connection
+            09:14:44 ERROR Could not reach payments.internal:9200
+            09:14:52 GET  /health 200 2ms
+            09:15:07 POST /api/payments 200 64ms
+            09:15:19 GET  /api/invoices 200 37ms
+            """)
+            store.logs = t
+        }
         if CommandLine.arguments.contains("toast") { store.flash("Stopped Next.js :3000", undo: UndoAction(label: "Undo") {}) }
         _ = NSApplication.shared
         Theme.flat = true

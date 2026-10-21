@@ -17,10 +17,18 @@ Free and open source. [Website](https://destucr.github.io/Switchboard/) · [Down
   </picture>
 </p>
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-logs-dark.png">
+    <img src="docs/screenshot-logs-light.png" width="380" alt="Switchboard showing a server's logs inside the popover">
+  </picture>
+</p>
+
 ## Features
 
 - **Know what is running.** Every server, grouped by project. Vite, Next.js, Laravel, Django, Docker, Postgres, Redis and more.
 - **The right button every time.** Open for web pages. Copy URL for APIs and databases.
+- **Read logs without leaving.** Output follows live inside Switchboard. Filter it, copy it, or send it to the terminal you like, including a tmux or zellij session you already have open.
 - **See what depends on what.** A map shows which servers talk to each other, and warns you before you stop one that others are using.
 - **Pick up where you left off.** Stopped servers stay on the list. One click starts the whole project again, in the right order.
 - **Share your setup.** Save a `switchboard.json` in your repo. A teammate adds the folder and presses Start stack.

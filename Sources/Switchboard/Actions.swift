@@ -162,7 +162,7 @@ enum Actions {
         let script = "#!/bin/zsh\nprintf '\\033]0;%s\\007' \(shellQuote(title))\nexec \(command)\n"
         try? script.write(to: url, atomically: true, encoding: .utf8)
         try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
-        guard terminal.run(script: url) else { throw ActionError.message("Could not open \(terminal.name). Pick another terminal.") }
+        guard terminal.run(script: url, title: title) else { throw ActionError.message(terminal.mux == nil ? "Could not open \(terminal.name). Pick another terminal." : "\(terminal.name) is not there any more. Pick another terminal.") }
     }
 
     // MARK: Share

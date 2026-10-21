@@ -56,6 +56,9 @@ final class LogTail: ObservableObject {
 
     func clear() { lines = [] }
 
+    /// Screenshots and tests: fill the view without reading a file.
+    func preload(_ text: String) { append(Data((text + "\n").utf8)) }
+
     // MARK: Following
 
     func start() {

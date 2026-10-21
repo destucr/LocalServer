@@ -632,7 +632,7 @@ final class Store: ObservableObject {
     /// The terminal last used for logs, if it is still installed.
     var logTerminal: TerminalApp {
         let id = UserDefaults.standard.string(forKey: "logTerminal")
-        return TerminalApp.installed.first { $0.id == id } ?? TerminalApp.installed.first ?? .fallback
+        return TerminalApp.installed.first { $0.id == id } ?? TerminalApp.apps.first ?? .fallback
     }
 
     /// Picked in the settings menu: remembered without opening anything.
