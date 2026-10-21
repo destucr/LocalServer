@@ -18,8 +18,8 @@ gh release create "v$V" "build/Switchboard-$V.zip" --title "Switchboard $V" --ge
 SHA="$(shasum -a 256 "build/Switchboard-$V.zip" | cut -d' ' -f1)"
 CASK="Casks/switchboard.rb"
 CUR="$(gh api "repos/destucr/homebrew-tap/contents/$CASK")"
-FILE_SHA="$(echo "$CUR" | jq -r .sha)"
-NEW="$(echo "$CUR" | jq -r .content | base64 -d | sed -E "s/^(  version \").*(\")/\1$V\2/; s/^(  sha256 \").*(\")/\1$SHA\2/")"
+FILE_SHA="$(printf '%s' "$CUR" | jq -r .sha)"
+NEW="$(printf '%s' "$CUR" | jq -r .content | base64 -d | sed -E "s/^(  version \").*(\")/\1$V\2/; s/^(  sha256 \").*(\")/\1$SHA\2/")"
 gh api -X PUT "repos/destucr/homebrew-tap/contents/$CASK" -f message="switchboard $V" \
-  -f content="$(echo "$NEW" | base64)" -f sha="$FILE_SHA" -f branch=main --jq .commit.html_url
+  -f content="$(printf '%s\n' "$NEW" | base64)" -f sha="$FILE_SHA" -f branch=main --jq .commit.html_url
 echo "Released v$V"
