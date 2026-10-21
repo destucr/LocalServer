@@ -2,6 +2,15 @@
 
 **Every local port, with its project.**
 
+<p>
+  <a href="https://github.com/destucr/Switchboard/releases/latest"><img src="https://img.shields.io/github/v/release/destucr/Switchboard?color=4F46E5&label=release" alt="Latest release"></a>
+  <a href="https://github.com/destucr/Switchboard/releases"><img src="https://img.shields.io/github/downloads/destucr/Switchboard/total?color=4F46E5" alt="Downloads"></a>
+  <a href="https://github.com/destucr/homebrew-tap"><img src="https://img.shields.io/badge/homebrew-cask-4F46E5" alt="Install with Homebrew"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-4F46E5" alt="Needs macOS 14 or later">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/destucr/Switchboard?color=4F46E5" alt="MIT license"></a>
+  <a href="https://github.com/destucr/Switchboard/stargazers"><img src="https://img.shields.io/github/stars/destucr/Switchboard?style=flat&color=4F46E5" alt="GitHub stars"></a>
+</p>
+
 Switchboard sits in your Mac menu bar and shows everything running on localhost, grouped by the project it belongs to. Open it, restart it, read its logs or stop it without going back to the terminal.
 
 Free and open source. [Website](https://destucr.github.io/Switchboard/) · [Download](https://github.com/destucr/Switchboard/releases/latest)
