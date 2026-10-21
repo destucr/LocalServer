@@ -140,7 +140,7 @@ struct RootView: View {
                 .focused($filterFocused)
                 .onSubmit { if let first = store.visible.first { store.primary(first) } }
             Button { Task { await store.refresh() } } label: { Image(systemName: "arrow.clockwise") }
-                .buttonStyle(.borderless).tip("Rescan now")
+                .buttonStyle(.borderless).tip("Rescan: check for new or stopped servers now")
         }
         .padding(.horizontal, 12).padding(.vertical, 9)
     }
@@ -235,7 +235,7 @@ struct PortCard: View {
             Spacer()
             if inUse {
                 Button("Copy \(String(next))") { Actions.copy(String(next)); store.flash("Copied \(next), the next free port") }
-                    .buttonStyle(PillButton(tone: .quiet, width: 74)).tip("Copy the next free port number")
+                    .buttonStyle(PillButton(tone: .quiet, width: 74)).tip("Copy \(String(next)): the next free port")
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
@@ -270,10 +270,9 @@ struct GroupHeader: View {
                 if stoppable > 0 { Button("Stop all \(stoppable)…") { store.stopAll(group) } }
             } label: {
                 Image(systemName: "ellipsis.circle").foregroundStyle(.secondary).frame(width: 24, height: 20).contentShape(Rectangle())
-                    .hoverTip("Project actions: open in editor, start, restart or stop everything", tint: Brand.primary)
+                    .hoverTip("Project actions: open in your editor, or start, restart or stop everything here", tint: Brand.primary)
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-            .tip(group.path.map { "Project actions for \(abbreviateHome($0))" } ?? "Group actions")
         }
         .padding(.horizontal, 12).padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -312,12 +311,12 @@ struct RowView: View {
                     if entry.web == .api {
                         Text("API").font(.system(size: 9, weight: .bold)).padding(.horizontal, 4).padding(.vertical, 1)
                             .background(.secondary.opacity(0.2), in: Capsule()).foregroundStyle(.secondary)
-                            .tip("Answers HTTP but not with a web page")
+                            .tip("API: answers HTTP, but not with a web page")
                     }
                     health
                     if entry.lanExposed {
                         Image(systemName: "wifi").font(.system(size: 9)).foregroundStyle(Brand.orange)
-                            .tip("Anyone on your network can reach this server (it listens on all interfaces)")
+                            .tip("Open to your network: anyone on your Wi-Fi can reach this server")
                     }
                     if store.isPinned(entry.key) { Image(systemName: "pin.fill").font(.system(size: 8)).foregroundStyle(.secondary) }
                 }
@@ -341,7 +340,7 @@ struct RowView: View {
                     secondaryActions
                 } else if let up = entry.uptime {
                     Text("up \(up)").font(.caption).foregroundStyle(.secondary).lineLimit(1).fixedSize()
-                        .tip("Running for \(up)")
+                        .tip("Uptime: running for \(up)")
                 }
                 mainButton
             }
@@ -355,9 +354,9 @@ struct RowView: View {
     @ViewBuilder private var health: some View {
         if let s = entry.status, let ms = entry.ms {
             if s >= 500 {
-                Text("\(s)").font(.system(size: 10, weight: .bold)).foregroundStyle(Brand.alert).tip("The server answered HTTP \(s)")
+                Text("\(s)").font(.system(size: 10, weight: .bold)).foregroundStyle(Brand.alert).tip("Error: the server answered HTTP \(s)")
             } else {
-                Text("\(ms) ms").font(.system(size: 10)).foregroundStyle(.secondary).tip("HTTP \(s) in \(ms) ms")
+                Text("\(ms) ms").font(.system(size: 10)).foregroundStyle(.secondary).tip("Response time: HTTP \(s) in \(ms) ms")
             }
         }
     }
@@ -369,29 +368,27 @@ struct RowView: View {
         } else if entry.web == .page {
             Button { store.open(entry) } label: { Text("Open") }
                 .buttonStyle(PillButton(tone: .open))
-                .onHover { store.setTip($0 ? "Open \(entry.address) in your browser  (⌘O)" : nil) }
-                .tip("Open \(entry.address) in your browser  (⌘O)")
+                .hoverTip("Open: show \(entry.address) in your browser  (⌘O)", tint: Brand.primary)
         } else {
             Button { store.copyLocal(entry) } label: {
                 Text(copied ? "Copied ✓" : entry.copyLabel).animation(Motion.anim, value: copied)
             }
             .buttonStyle(PillButton(tone: copied ? .copied : .quiet))
-            .onHover { store.setTip($0 ? "Copy \(entry.address)  (⌘C)" : nil) }
-            .tip("Copy \(entry.address)  (⌘C)")
+            .hoverTip("\(entry.copyLabel): put \(entry.address) on your clipboard  (⌘C)", tint: Brand.primary)
         }
     }
 
     private var secondaryActions: some View {
         HStack(spacing: 0) {
             if entry.web == .page {
-                IconButton(symbol: "doc.on.doc", help: "Copy \(entry.address)  (⌘C)") { store.copyLocal(entry) }
+                IconButton(symbol: "doc.on.doc", help: "Copy link: put \(entry.address) on your clipboard  (⌘C)") { store.copyLocal(entry) }
             }
-            IconButton(symbol: "arrow.clockwise", help: canRestart ? "Restart with the same command  (⌘R)" : "Can't restart: LocalServer doesn't know how this was started")
+            IconButton(symbol: "arrow.clockwise", help: canRestart ? "Restart: stop it and run the same command again  (⌘R)" : "Restart isn't available: LocalServer didn't see how this was started")
                 { store.restart(entry) }
                 .disabled(!canRestart)
-            IconButton(symbol: "terminal", help: "Logs: follow the output in Terminal  (⌘L)") { store.tail(entry) }
+            IconButton(symbol: "terminal", help: "Logs: follow this server's output in Terminal  (⌘L)") { store.tail(entry) }
             shareMenu
-            IconButton(symbol: "stop.fill", help: "Stop this server  (⌘⌫)", tint: Brand.alert) { store.kill(entry) }
+            IconButton(symbol: "stop.fill", help: "Stop: shut this server down. You can Start it again later  (⌘⌫)", tint: Brand.alert) { store.kill(entry) }
             moreMenu
         }
     }
@@ -414,11 +411,10 @@ struct RowView: View {
             }
         } label: {
             Image(systemName: "square.and.arrow.up").frame(width: 24, height: 24).contentShape(Rectangle())
-                .hoverTip(entry.web == .none ? "Sharing needs a web server" : "Share: copy a link, show a QR code, or get an internet link", tint: Brand.primary)
+                .hoverTip(entry.web == .none ? "Share isn't available: this isn't a web server" : "Share: copy a link, show a QR code, or get an internet link", tint: Brand.primary)
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         .disabled(entry.web == .none)
-        .tip("Share this server")
     }
 
     private var moreMenu: some View {
@@ -433,10 +429,9 @@ struct RowView: View {
             }
         } label: {
             Image(systemName: "ellipsis").frame(width: 24, height: 24).contentShape(Rectangle())
-                .hoverTip("More: pin, rename, open the project in your editor", tint: Brand.primary)
+                .hoverTip("More: pin, rename, or open the project in your editor", tint: Brand.primary)
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-        .tip("More: pin, rename, open project")
     }
 }
 
@@ -461,14 +456,13 @@ struct StoppedRow: View {
                 ProgressView().controlSize(.small)
             } else {
                 if hover {
-                    IconButton(symbol: store.isPinned(server.key) ? "pin.slash" : "pin", help: store.isPinned(server.key) ? "Unpin" : "Pin to top") { store.togglePin(server) }
-                    IconButton(symbol: "xmark", help: "Forget this server  (⌘⌫)") { store.forget(server) }
+                    IconButton(symbol: store.isPinned(server.key) ? "pin.slash" : "pin", help: store.isPinned(server.key) ? "Unpin: stop keeping it at the top" : "Pin: keep it at the top of the list") { store.togglePin(server) }
+                    IconButton(symbol: "xmark", help: "Forget: remove it from the stopped list  (⌘⌫)") { store.forget(server) }
                 }
                 if server.canStart {
                     Button { store.start(server) } label: { Text("Start") }
                         .buttonStyle(PillButton(tone: .start))
-                        .onHover { store.setTip($0 ? (server.containerID != nil ? "Start this container again  (⌘R)" : "Run it again in \(abbreviateHome(server.start?.cwd ?? ""))  (⌘R)") : nil) }
-                        .tip((server.containerID != nil ? "Start this container again" : "Run it again in \(abbreviateHome(server.start?.cwd ?? ""))") + "  (⌘R)")
+                        .hoverTip("Start: " + (server.containerID != nil ? "bring this container back" : "run it again in \(abbreviateHome(server.start?.cwd ?? ""))") + "  (⌘R)", tint: Brand.green)
                 } else {
                     Text("not running").font(.caption).foregroundStyle(.secondary)
                 }
@@ -490,7 +484,7 @@ struct TunnelLine: View {
             case .starting: Text("Creating public link…")
             case .running(let url):
                 Button(url) { Actions.copy(url); Store.shared.flash("Public link copied: \(url)") }
-                    .buttonStyle(.plain).underline().tip("Public link, click to copy again")
+                    .buttonStyle(.plain).underline().tip("Public link: click to copy it again")
             case .failed(let why): Text("Public link failed (\(why))")
             }
         }

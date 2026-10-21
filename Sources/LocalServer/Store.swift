@@ -243,10 +243,10 @@ final class Store: ObservableObject {
     var hoverHint: String? {
         guard let key = hoverKey else { return nil }
         if let e = entries.first(where: { $0.key == key }) {
-            return e.web == .page ? "⌘O open · ⌘C copy · ⌘R restart · ⌘L logs · ⌘⌫ stop"
-                                  : "⌘C copy · ⌘R restart · ⌘L logs · ⌘⌫ stop"
+            return e.web == .page ? "⌘O Open · ⌘C Copy · ⌘R Restart · ⌘L Logs · ⌘⌫ Stop"
+                                  : "⌘C Copy · ⌘R Restart · ⌘L Logs · ⌘⌫ Stop"
         }
-        return stopped.contains { $0.key == key } ? "⌘R start · ⌘⌫ forget" : nil
+        return stopped.contains { $0.key == key } ? "⌘R Start · ⌘⌫ Forget" : nil
     }
 
     /// ⌘ shortcuts act on the row under the pointer. Returns true if one was handled.
