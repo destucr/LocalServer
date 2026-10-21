@@ -92,6 +92,31 @@ if CommandLine.arguments.contains("--diagnose-test") {
     exit(0)
 }
 
+// Debug helper: `Switchboard --nav-test` checks the arrow-key selection logic.
+if CommandLine.arguments.contains("--nav-test") {
+    MainActor.assumeIsolated {
+        func e(_ port: Int, _ group: String, _ title: String) -> PortEntry {
+            PortEntry(id: "\(port)", port: port, host: "127.0.0.1", lanExposed: false, kind: .dev, title: title, pid: 1, command: "", projectName: group,
+                      projectPath: "/p/\(group)", group: group, uptime: nil, container: nil, web: .page, restart: nil)
+        }
+        let stopped = KnownServer(key: "/p/b:4000", port: 4000, title: "Storybook", group: "b", projectPath: "/p/b", start: nil, containerID: nil, lastSeen: Date())
+        let s = Store(sample: [e(5173, "a", "Vite"), e(3000, "b", "Next.js"), e(3001, "b", "Node.js")], stopped: [stopped])
+        func name(_ k: String?) -> String { k.map { ($0 as NSString).lastPathComponent } ?? "none" }
+        print("order:", s.navKeys.map(name).joined(separator: " → "))
+        print("start: selected=\(name(s.selectedKey)) active=\(name(s.activeKey))")
+        s.moveSelection(1); print("down:  selected=\(name(s.selectedKey)) active=\(name(s.activeKey))")
+        s.moveSelection(1); s.moveSelection(1); print("down x2: selected=\(name(s.selectedKey))")
+        s.moveSelection(1); s.moveSelection(1); s.moveSelection(1); print("down past the end: selected=\(name(s.selectedKey)) (should stay on the last)")
+        s.moveSelection(-1); print("up:    selected=\(name(s.selectedKey))")
+        s.setHover("/p/a:5173", true); print("pointer enters Vite: keyboardMode=\(s.keyboardMode) active=\(name(s.activeKey))")
+        s.moveSelection(-1); print("up again: keyboardMode=\(s.keyboardMode) active=\(name(s.activeKey))")
+        s.clearSelection(); print("esc:   selected=\(name(s.selectedKey)) keyboardMode=\(s.keyboardMode)")
+        s.query = "next"; print("filter 'next': order =", s.navKeys.map(name).joined(separator: ", "))
+        s.moveSelection(-1); print("up with filter: selected=\(name(s.selectedKey)) (first press from nothing goes to the last match)")
+    }
+    exit(0)
+}
+
 // Debug helper: `Switchboard --stack` prints who talks to whom.
 if CommandLine.arguments.contains("--stack") {
     let m = Scanner.stack(entries: Scanner.scan())

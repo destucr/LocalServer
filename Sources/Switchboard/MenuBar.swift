@@ -68,15 +68,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in self?.toggle() }
         }
 
-        // ⌘O / ⌘C / ⌘R / ⌘L / ⌘⌫ act on the row under the pointer.
+        // Keyboard: ↑ ↓ choose a row, Return does its main action, ⌘O ⌘C ⌘R ⌘L ⌘⌫ act on it, Esc clears the filter.
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] ev in
-            guard let self, self.popover.isShown,
-                  ev.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command else { return ev }
-            if let tv = self.popover.contentViewController?.view.window?.firstResponder as? NSTextView, tv.selectedRange().length > 0 {
-                return ev   // let ⌘C copy selected text in the filter box
+            guard let self, self.popover.isShown else { return ev }
+            let flags = ev.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let handled: Bool = MainActor.assumeIsolated {
+                if flags.isEmpty, !self.store.showMap {
+                    switch ev.keyCode {
+                    case 125: self.store.moveSelection(1); return true
+                    case 126: self.store.moveSelection(-1); return true
+                    case 53:
+                        if !self.store.query.isEmpty { self.store.query = ""; return true }
+                        if self.store.selectedKey != nil { self.store.clearSelection(); return true }
+                    default: break
+                    }
+                }
+                guard flags == .command else { return false }
+                if let tv = self.popover.contentViewController?.view.window?.firstResponder as? NSTextView, tv.selectedRange().length > 0 {
+                    return false   // let ⌘C copy selected text in the filter box
+                }
+                return self.store.shortcut(ev.charactersIgnoringModifiers?.lowercased() ?? "", deleteKey: ev.keyCode == 51)
             }
-            let ch = ev.charactersIgnoringModifiers?.lowercased() ?? ""
-            let handled = MainActor.assumeIsolated { self.store.shortcut(ch, deleteKey: ev.keyCode == 51) }
             return handled ? nil : ev
         }
 

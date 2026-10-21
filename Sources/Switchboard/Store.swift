@@ -21,6 +21,8 @@ final class Store: ObservableObject {
     @Published var busy: [String: String] = [:]   // row key → what it is doing, e.g. "Restarting…"
     @Published var copiedID: String?
     @Published private(set) var hoverKey: String?
+    @Published private(set) var selectedKey: String?     // row chosen with the arrow keys
+    @Published private(set) var keyboardMode = false      // true once the arrow keys were used, until the pointer moves in
     @Published private(set) var backdropTint: Double = 0.12   // extra tint so text stays readable over the wallpaper
     @Published private(set) var tip: String?   // what the hovered icon does, shown in the footer
     @Published private(set) var recent: Set<String> = []   // servers that just appeared
@@ -138,6 +140,7 @@ final class Store: ObservableObject {
     func refresh() async {
         let result = await Task.detached(priority: .utility) { Scanner.scan() }.value
         if result != entries { withAnimation(Motion.anim) { entries = result } }
+        if let s = selectedKey, !navKeys.contains(s) { selectedKey = nil }
         guard persistent else { return }
         refreshTick += 1
         if showMap || (refreshTick % 5 == 0 && result.filter({ $0.kind != .other }).count >= 2) {
@@ -290,14 +293,43 @@ final class Store: ObservableObject {
     // MARK: Hover and shortcuts
 
     func setHover(_ key: String, _ on: Bool) {
-        if on { hoverKey = key } else if hoverKey == key { hoverKey = nil }
+        if on { hoverKey = key; if keyboardMode { keyboardMode = false } } else if hoverKey == key { hoverKey = nil }
+    }
+
+    /// The row shortcuts act on: the selected one while using the keyboard, otherwise the one under the pointer.
+    var activeKey: String? { keyboardMode ? selectedKey : hoverKey }
+
+    /// Every row in the order it appears on screen.
+    var navKeys: [String] { groups.flatMap { $0.running.map(\.key) + $0.stopped.map(\.key) } }
+
+    func moveSelection(_ delta: Int) {
+        let keys = navKeys
+        guard !keys.isEmpty else { return }
+        keyboardMode = true
+        setTip(nil)
+        if let cur = selectedKey, let i = keys.firstIndex(of: cur) {
+            selectedKey = keys[min(max(i + delta, 0), keys.count - 1)]
+        } else {
+            selectedKey = delta >= 0 ? keys.first : keys.last
+        }
+    }
+
+    func clearSelection() { selectedKey = nil; keyboardMode = false }
+
+    /// Return: do the main thing for the selected row, or for the first match if nothing is selected.
+    func activate() {
+        if let key = activeKey ?? (query.isEmpty ? nil : visible.first?.key) {
+            if let e = entries.first(where: { $0.key == key }) { primary(e); return }
+            if let k = stopped.first(where: { $0.key == key }), k.canStart { start(k); return }
+        }
+        if let first = visible.first { primary(first) }
     }
 
     func setTip(_ text: String?) { if tip != text { tip = text } }
 
     /// Shown in the footer while the pointer is on a row.
     var hoverHint: String? {
-        guard let key = hoverKey else { return nil }
+        guard let key = activeKey else { return nil }
         if let e = entries.first(where: { $0.key == key }) {
             return e.web == .page ? "⌘O Open · ⌘C Copy · ⌘R Restart · ⌘L Logs · ⌘⌫ Stop"
                                   : "⌘C Copy · ⌘R Restart · ⌘L Logs · ⌘⌫ Stop"
@@ -307,7 +339,7 @@ final class Store: ObservableObject {
 
     /// ⌘ shortcuts act on the row under the pointer. Returns true if one was handled.
     func shortcut(_ ch: String, deleteKey: Bool) -> Bool {
-        guard let key = hoverKey else { return false }
+        guard let key = activeKey else { return false }
         if let e = entries.first(where: { $0.key == key }) {
             if deleteKey { kill(e); return true }
             switch ch {

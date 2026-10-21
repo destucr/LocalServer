@@ -80,6 +80,7 @@ struct RootView: View {
     private let listHeight: CGFloat = 440
 
     var body: some View {
+        ScrollViewReader { proxy in
         VStack(spacing: 0) {
             header
             Divider()
@@ -99,8 +100,8 @@ struct RootView: View {
                         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                             ForEach(store.groups) { g in
                                 Section {
-                                    ForEach(g.running) { RowView(entry: $0).transition(.opacity.combined(with: .move(edge: .top))) }
-                                    ForEach(g.stopped) { StoppedRow(server: $0).transition(.opacity) }
+                                    ForEach(g.running) { RowView(entry: $0).id($0.key).transition(.opacity.combined(with: .move(edge: .top))) }
+                                    ForEach(g.stopped) { StoppedRow(server: $0).id($0.key).transition(.opacity) }
                                 } header: {
                                     GroupHeader(group: g)
                                 }
@@ -132,7 +133,12 @@ struct RootView: View {
         .background { if let m = Theme.matte { Rectangle().fill(m) } }
         .onReceive(NotificationCenter.default.publisher(for: .popoverDidShow)) { _ in
             store.query = ""
+            store.clearSelection()
             filterFocused = true
+        }
+        .onChange(of: store.selectedKey) { _, k in
+            if let k { withAnimation(Motion.anim) { proxy.scrollTo(k, anchor: .center) } }
+        }
         }
     }
 
@@ -142,7 +148,7 @@ struct RootView: View {
             TextField("Filter, or type a port (3000)", text: $store.query)
                 .textFieldStyle(.plain)
                 .focused($filterFocused)
-                .onSubmit { if let first = store.visible.first { store.primary(first) } }
+                .onSubmit { store.activate() }
             Picker("View", selection: $store.showMap) {
                 Image(systemName: "list.bullet").tag(false)
                 Image(systemName: "point.3.connected.trianglepath.dotted").tag(true)
@@ -306,6 +312,7 @@ struct RowView: View {
         _tunnels = ObservedObject(wrappedValue: Store.shared.tunnels)
     }
 
+    private var active: Bool { store.keyboardMode ? store.selectedKey == entry.key : hover }
     private var armed: Bool { store.armedKill == entry.id }
     private var busyLabel: String? { store.busy[entry.key] }
     private var copied: Bool { store.copiedID == entry.id }
@@ -351,7 +358,7 @@ struct RowView: View {
             } else {
                 if armed {
                     Text("Stop \(entry.title)?").font(.caption).foregroundStyle(Brand.alert)
-                } else if hover {
+                } else if active {
                     secondaryActions
                 } else if let up = entry.uptime {
                     Text("up \(up)").font(.caption).foregroundStyle(.secondary).lineLimit(1).fixedSize()
@@ -362,8 +369,20 @@ struct RowView: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
         .frame(height: 44)
-        .background(store.recent.contains(entry.key) ? Brand.mint.opacity(0.20) : (hover ? Color.primary.opacity(0.07) : .clear))
+        .background(store.recent.contains(entry.key) ? Brand.mint.opacity(0.20)
+                    : (store.keyboardMode && active ? Brand.primary.opacity(0.14) : (active ? Color.primary.opacity(0.07) : .clear)))
+        .overlay(alignment: .leading) { if store.keyboardMode && active { Rectangle().fill(Brand.primary).frame(width: 3) } }
         .onHover { hover = $0; store.setHover(entry.key, $0) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(store.displayName(entry)), port \(entry.port)\(entry.web == .api ? ", API" : ""), running\(entry.uptime.map { " for \($0)" } ?? "")\(entry.status.map { $0 >= 500 ? ", returning error \($0)" : "" } ?? "")")
+        .accessibilityHint(entry.web == .page ? "Opens in your browser" : "Copies \(entry.address)")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { store.primary(entry) }
+        .accessibilityAction(named: "Restart") { if canRestart { store.restart(entry) } }
+        .accessibilityAction(named: "Show logs") { store.tail(entry) }
+        .accessibilityAction(named: "Copy \(entry.address)") { store.copyLocal(entry) }
+        .accessibilityAction(named: "Stop") { store.kill(entry) }
+        .accessibilityAction(named: store.isPinned(entry.key) ? "Unpin" : "Pin") { store.togglePin(entry) }
     }
 
     @ViewBuilder private var health: some View {
@@ -456,6 +475,8 @@ struct StoppedRow: View {
     let server: KnownServer
     @State private var hover = false
 
+    private var active: Bool { store.keyboardMode ? store.selectedKey == server.key : hover }
+
     private var stoppedLine: String {
         guard let reason = server.stopReason else { return "stopped" }
         let ago = server.stoppedAt.map { formatDuration(Int(Date().timeIntervalSince($0))) + " ago · " } ?? ""
@@ -483,7 +504,7 @@ struct StoppedRow: View {
                 Text(label).font(.caption).foregroundStyle(.secondary)
                 ProgressView().controlSize(.small)
             } else {
-                if hover {
+                if active {
                     IconButton(symbol: store.isPinned(server.key) ? "pin.slash" : "pin", help: store.isPinned(server.key) ? "Unpin: stop keeping it at the top" : "Pin: keep it at the top of the list") { store.togglePin(server) }
                     IconButton(symbol: "xmark", help: "Forget: remove it from the stopped list  (⌘⌫)") { store.forget(server) }
                 }
@@ -498,8 +519,16 @@ struct StoppedRow: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
         .frame(height: 44)
-        .background(hover ? Color.primary.opacity(0.07) : .clear)
+        .background(store.keyboardMode && active ? Brand.primary.opacity(0.14) : (active ? Color.primary.opacity(0.07) : .clear))
+        .overlay(alignment: .leading) { if store.keyboardMode && active { Rectangle().fill(Brand.primary).frame(width: 3) } }
         .onHover { hover = $0; store.setHover(server.key, $0) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(store.names[server.key] ?? server.title), port \(server.port), stopped\(server.stopReason.map { ". \($0)" } ?? "")")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { if server.canStart { store.start(server) } }
+        .accessibilityAction(named: "Start") { if server.canStart { store.start(server) } }
+        .accessibilityAction(named: "Why did it stop") { store.explain(server) }
+        .accessibilityAction(named: "Forget") { store.forget(server) }
     }
 }
 
