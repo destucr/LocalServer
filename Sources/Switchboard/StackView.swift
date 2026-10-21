@@ -91,7 +91,7 @@ struct StackMapView: View {
                         }
                     }
                     if !layout.isolated.isEmpty {
-                        Text("Not connected").font(.caption).foregroundStyle(.secondary).position(x: 56, y: geo.size.height - stripHeight - 4)
+                        Text("No connection seen").font(.caption).foregroundStyle(.secondary).position(x: 56, y: geo.size.height - stripHeight - 4)
                     }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
@@ -295,7 +295,7 @@ private struct DetailCard: View {
 
     var body: some View {
         let entry = store.entries.first { $0.id == node.entryID }
-        let by = map.usedBy(node.id), uses = map.uses(node.id), broken = map.brokenLinks(node.id)
+        let uses = map.uses(node.id), broken = map.brokenLinks(node.id)
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: node.type.symbol).font(.system(size: 12, weight: .medium)).foregroundStyle(.white)
@@ -305,8 +305,13 @@ private struct DetailCard: View {
                 Spacer()
                 Button { close() } label: { Image(systemName: "xmark") }.buttonStyle(.borderless)
             }
-            if !by.isEmpty { Text("Used by " + names(by)).font(.caption).foregroundStyle(.secondary) }
-            if !uses.isEmpty { Text("Uses " + names(uses)).font(.caption).foregroundStyle(.secondary) }
+            let liveBy = map.usedBy(node.id, live: true), envBy = map.usedBy(node.id, live: false)
+            let liveUses = uses.filter { u in map.edges.contains { $0.from == node.id && $0.to == u.id && !$0.configured } }
+            let envUses = uses.filter { u in !liveUses.contains(u) }
+            if !liveBy.isEmpty { Text("Connected from " + names(liveBy)).font(.caption).foregroundStyle(.secondary) }
+            if !liveUses.isEmpty { Text("Connected to " + names(liveUses)).font(.caption).foregroundStyle(.secondary) }
+            if !envBy.isEmpty { Text("Its project's .env points here from " + names(envBy) + ". No connection seen yet.").font(.caption).foregroundStyle(.secondary) }
+            if !envUses.isEmpty { Text("This project's .env points at " + names(envUses) + ". No connection seen yet.").font(.caption).foregroundStyle(.secondary) }
             ForEach(broken, id: \.to) { b in
                 Label("Expects :\(b.to.split(separator: ":").last ?? "") (\(b.hint ?? "config")), but nothing is listening", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption).foregroundStyle(Brand.alert)
@@ -316,7 +321,7 @@ private struct DetailCard: View {
                     if e.web == .page { Button("Open") { store.open(e) }.buttonStyle(PillButton(tone: .open, width: 64)) }
                     else { Button(e.copyLabel) { store.copyLocal(e) }.buttonStyle(PillButton(tone: .quiet, width: 84)) }
                     Button("Stop") { store.kill(e) }.buttonStyle(PillButton(tone: .stop, width: 64))
-                    if !by.isEmpty { Text("Stopping it affects \(by.count)").font(.caption).foregroundStyle(.secondary) }
+                    if !liveBy.isEmpty { Text("\(liveBy.count) connected to it").font(.caption).foregroundStyle(.secondary) }
                 }
             }
         }
@@ -333,10 +338,10 @@ private struct DetailCard: View {
 private struct Legend: View {
     var body: some View {
         HStack(spacing: 12) {
-            item(Brand.primaryText, dash: false, "connected now")
-            item(Color.secondary, dash: true, "set in .env")
-            item(Brand.alert, dash: false, "problem")
-            Text("·  drag to move, pinch to zoom").foregroundStyle(.secondary)
+            item(Brand.primaryText, dash: false, "connected")
+            item(Color.secondary, dash: true, "in .env, not seen")
+            item(Brand.alert, dash: false, "error")
+            Text("·  drag or pinch").foregroundStyle(.secondary)
         }
         .font(.system(size: 10)).foregroundStyle(.secondary)
     }

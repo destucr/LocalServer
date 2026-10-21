@@ -494,10 +494,20 @@ final class Store: ObservableObject {
             // Magic moment: if other running servers are connected to this one, say so before pulling the plug.
             let snapshot = entries
             let map = await Task.detached(priority: .userInitiated) { Scanner.stack(entries: snapshot) }.value
-            let users = map.usedBy(e.key).filter { $0.role != .missing }
-            if !users.isEmpty {
-                let list = users.map { "\($0.title)\($0.port.map { " :\($0)" } ?? "")" + ($0.project.map { "  (\($0))" } ?? "") }.joined(separator: "\n")
-                guard Dialogs.confirm("\(users.count) running server\(users.count == 1 ? " uses" : "s use") \(displayName(e))", list + "\n\nThey will lose their connection if you stop it.", ok: "Stop anyway") else { return }
+            let live = map.usedBy(e.key, live: true).filter { $0.role != .missing }
+            let named = map.usedBy(e.key, live: false).filter { $0.role != .missing }
+            if !live.isEmpty || !named.isEmpty {
+                func list(_ n: [StackNode]) -> String { n.map { "\($0.title)\($0.port.map { " :\($0)" } ?? "")" + ($0.project.map { "  (\($0))" } ?? "") }.joined(separator: "\n") }
+                var title = "", body = ""
+                if !live.isEmpty {
+                    title = "\(live.count) running server\(live.count == 1 ? " is" : "s are") connected to \(displayName(e))"
+                    body = list(live) + "\n\nThey will lose the connection if you stop it."
+                    if !named.isEmpty { body += "\n\nThe .env files of these also point at it, but no connection was seen:\n" + list(named) }
+                } else {
+                    title = "Some projects point at \(displayName(e))"
+                    body = list(named) + "\n\nTheir .env files use this port. Switchboard has not seen them connected, so stopping it may not affect them."
+                }
+                guard Dialogs.confirm(title, body, ok: "Stop anyway") else { return }
             }
             expectedStops[e.key] = Date()
             let again = known[e.key].flatMap { $0.canStart ? $0 : nil }

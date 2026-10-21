@@ -40,6 +40,10 @@ Switchboard is not notarized yet, so macOS asks you to confirm the first launch.
 xattr -dr com.apple.quarantine /Applications/Switchboard.app
 ```
 
+## How the map decides
+
+A solid line means Switchboard saw an open connection between two of your local servers. A dashed grey line means a project's `.env` file names that port, but no connection was seen. A red line means the other end returned an error or nothing is listening there. A missing line does not prove two servers are unrelated. The dashed box around servers is just the project folder they share.
+
 ## Command line
 
 The cask also installs a `switchboard` command for the terminal:

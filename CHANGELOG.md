@@ -12,6 +12,7 @@ All notable changes to Switchboard. The format follows [Keep a Changelog](https:
 - The port check called a port "in use" for up to 30 seconds after a server stopped, which could block Undo and Start. It now asks whether anything accepts connections.
 
 ### Changed
+- The map and the Stop warning now separate connections that were seen from ports that only a `.env` file names, so a guess is never presented as a fact. Labels say "connected", "in .env, not seen" and "No connection seen".
 - Motion: rows, panels and map nodes slide and settle with springs instead of fading, the list and the map switch with a slide, and buttons press in.
 - Install notes: the first launch steps now match current macOS (Privacy & Security, Open Anyway).
 - README rewritten around what you get, with a one line tagline.

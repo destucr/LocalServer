@@ -69,7 +69,7 @@ struct StackNode: Identifiable, Hashable {
 struct StackEdge: Hashable {
     var from: String
     var to: String
-    var count: Int          // open connections right now
+    var count: Int          // open connections seen at the last scan, not requests
     var hint: String?       // where a configured link came from, e.g. "DB_PORT in .env"
     var configured: Bool    // found in .env but no live connection
     var broken: Bool        // configured, and nothing listens there
@@ -82,6 +82,8 @@ struct StackMap {
 
     func node(_ id: String) -> StackNode? { nodes.first { $0.id == id } }
     func uses(_ id: String) -> [StackNode] { edges.filter { $0.from == id && !$0.broken }.compactMap { node($0.to) } }
+    /// Servers connected to this one right now (`live`), or only named in a .env file (`configured`).
+    func usedBy(_ id: String, live: Bool) -> [StackNode] { edges.filter { $0.to == id && $0.configured != live }.compactMap { node($0.from) } }
     func usedBy(_ id: String) -> [StackNode] { edges.filter { $0.to == id }.compactMap { node($0.from) } }
     func brokenLinks(_ id: String) -> [StackEdge] { edges.filter { $0.from == id && $0.broken } }
 
