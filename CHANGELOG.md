@@ -8,6 +8,9 @@ All notable changes to Switchboard. The format follows [Keep a Changelog](https:
 - Starting a server whose port is taken now says who holds it and offers to start on the next free port. Start stack and Start project skip taken ports and tell you which.
 - MIT license.
 
+### Fixed
+- The port check called a port "in use" for up to 30 seconds after a server stopped, which could block Undo and Start. It now asks whether anything accepts connections.
+
 ### Changed
 - Motion: rows, panels and map nodes slide and settle with springs instead of fading, the list and the map switch with a slide, and buttons press in.
 - Install notes: the first launch steps now match current macOS (Privacy & Security, Open Anyway).

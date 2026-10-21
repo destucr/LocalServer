@@ -220,6 +220,28 @@ if CommandLine.arguments.contains("--selftest") {
     let order = StartPlan.levels(startable: [web, api, db], pool: [web, api, db]).map { $0.map(\.key) }
     check("start order follows dependencies", order == [["db"], ["api"], ["web"]])
 
+    // The port check must not call a just-stopped server's port "in use" (TIME_WAIT), and must see a real listener.
+    do {
+        func sock() -> Int32 { socket(AF_INET, SOCK_STREAM, 0) }
+        func addr(_ port: UInt16) -> sockaddr_in {
+            var a = sockaddr_in(); a.sin_len = UInt8(MemoryLayout<sockaddr_in>.size); a.sin_family = sa_family_t(AF_INET)
+            a.sin_port = port.bigEndian; a.sin_addr.s_addr = UInt32(0x7f000001).bigEndian; return a
+        }
+        func bindTo(_ fd: Int32, _ port: UInt16) -> Bool {
+            var a = addr(port); return withUnsafePointer(to: &a) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } } == 0
+        }
+        let port: UInt16 = 8763
+        var one: Int32 = 1
+        let srv = sock(); setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &one, socklen_t(4))
+        check("selftest port bind", bindTo(srv, port)); listen(srv, 4)
+        check("a listening port is not free", !Ports.isFree(Int(port)))
+        let cli = sock(); var ca = addr(port)
+        _ = withUnsafePointer(to: &ca) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(cli, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
+        let conn = accept(srv, nil, nil)
+        close(conn); usleep(200_000); close(cli); close(srv)   // the server closes first, which leaves TIME_WAIT behind
+        check("a just-stopped port is free", Ports.isFree(Int(port)))
+    }
+
     print(failed == 0 ? "selftest passed (\(passed) checks)" : "selftest FAILED (\(failed) of \(passed + failed))")
     exit(failed == 0 ? 0 : 1)
 }
