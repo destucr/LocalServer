@@ -73,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             guard let self, self.popover.isShown else { return ev }
             let flags = ev.modifierFlags.intersection(.deviceIndependentFlagsMask)
             let handled: Bool = MainActor.assumeIsolated {
+                if flags.isEmpty, ev.keyCode == 53, self.store.escapeLogs() { return true }
                 if flags.isEmpty, !self.store.showMap {
                     switch ev.keyCode {
                     case 125: self.store.moveSelection(1); return true
@@ -97,7 +98,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    func popoverDidClose(_ notification: Notification) { TipWindow.shared.hide() }
+    func popoverDidClose(_ notification: Notification) {
+        TipWindow.shared.hide()
+        MainActor.assumeIsolated { store.logs?.stop() }   // nothing reads the file while the popover is hidden
+    }
 
     private func updateTitle() {
         let n = store.count
@@ -114,6 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: b.bounds, of: b, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
+        store.logs?.start()
         NotificationCenter.default.post(name: .popoverDidShow, object: nil)
         Task { await store.refresh() }
     }

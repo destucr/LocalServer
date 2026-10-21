@@ -4,6 +4,9 @@ All notable changes to Switchboard. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Added
+- Logs open inside Switchboard instead of a new Terminal window. They follow new lines, can be filtered, copied and cleared, and work for Docker containers too. Terminal is still one click away.
+
 ## [1.6.0] - 2026-10-21
 
 ### Added

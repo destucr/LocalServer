@@ -84,6 +84,9 @@ struct RootView: View {
     var body: some View {
         ScrollViewReader { proxy in
         VStack(spacing: 0) {
+            if let t = store.logs {
+                LogView(tail: t).frame(height: listHeight + 41).clipped().transition(Motion.reduced ? .opacity : .move(edge: .trailing))
+            } else {
             header
             Divider()
             VStack(spacing: 0) {
@@ -135,6 +138,7 @@ struct RootView: View {
                 }
             }
             .animation(Motion.pop, value: store.message)
+            }
             Divider()
             footer
         }
@@ -440,7 +444,7 @@ struct RowView: View {
             IconButton(symbol: "arrow.clockwise", help: canRestart ? "Restart  (⌘R)" : "Can't restart this one")
                 { store.restart(entry) }
                 .disabled(!canRestart)
-            IconButton(symbol: "terminal", help: "Logs in Terminal  (⌘L)") { store.tail(entry) }
+            IconButton(symbol: "text.alignleft", help: "Logs  (⌘L)") { store.tail(entry) }
             shareMenu
             IconButton(symbol: "stop.fill", help: "Stop  (⌘⌫)", tint: Brand.alert) { store.kill(entry) }
             moreMenu
@@ -634,7 +638,7 @@ struct ServerMenu: View {
         Button(entry.copyLabel) { store.copyLocal(entry) }
         Divider()
         Button("Restart") { store.restart(entry) }.disabled(entry.container == nil && entry.restart == nil)
-        Button("Show logs in Terminal") { store.tail(entry) }
+        Button("Show logs") { store.tail(entry) }
         Button("Stop") { store.kill(entry) }
         Divider()
         Button(store.isPinned(entry.key) ? "Unpin" : "Pin to top") { store.togglePin(entry) }

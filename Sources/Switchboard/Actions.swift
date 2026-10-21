@@ -114,17 +114,23 @@ enum Actions {
 
     // MARK: Tail
 
-    static func tail(_ e: PortEntry) throws {
-        let title = "\(e.title) :\(e.port)"
+    static func logSource(_ e: PortEntry) throws -> LogSource {
         if let c = e.container {
             guard let bin = Docker.binary else { throw ActionError.message("docker not found") }
-            openTerminal(title: title, command: "\(shellQuote(bin)) logs -f --tail 200 \(shellQuote(c.id))")
-            return
+            return .docker(bin: bin, id: c.id)
         }
         guard let path = logFile(for: e) else {
             throw ActionError.message("No log file found. Restart from here and output will be captured.")
         }
-        openTerminal(title: title, command: "tail -n 200 -F \(shellQuote(path))")
+        return .file(path)
+    }
+
+    static func tail(_ e: PortEntry) throws {
+        let title = "\(e.title) :\(e.port)"
+        switch try logSource(e) {
+        case .docker(let bin, let id): openTerminal(title: title, command: "\(shellQuote(bin)) logs -f --tail 200 \(shellQuote(id))")
+        case .file(let path): openTerminal(title: title, command: "tail -n 200 -F \(shellQuote(path))")
+        }
     }
 
     /// stdout/stderr redirected to a file → that file; otherwise the newest log in the project.

@@ -242,6 +242,33 @@ if CommandLine.arguments.contains("--selftest") {
         check("a just-stopped port is free", Ports.isFree(Int(port)))
     }
 
+    // Log tail: whole lines only, colour codes removed, odd bytes and cut files survive.
+    MainActor.assumeIsolated {
+        let path = NSTemporaryDirectory() + "sb-selftest-\(getpid()).log"
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        func write(_ d: Data, append: Bool = true) {
+            if append, let h = FileHandle(forWritingAtPath: path) { h.seekToEndOfFile(); h.write(d); try? h.close() } else { try? d.write(to: URL(fileURLWithPath: path)) }
+        }
+        write(Data("one\n\u{1B}[31mred error\u{1B}[0m\nhalf".utf8), append: false)
+        let t = LogTail(source: .file(path), title: "t", key: "k")
+        t.start()
+        check("log tail reads whole lines only", t.lines.map(\.text) == ["one", "red error"])
+        check("log tail strips colour codes and flags errors", t.lines.last?.kind == .error)
+        let snow = Array("é".utf8)   // two bytes, written one at a time
+        write(Data(" line\n".utf8.prefix(0)) + Data([snow[0]]))
+        t.stop(); t.start()
+        write(Data([snow[1]]) + Data("\n".utf8))
+        t.stop(); t.start()
+        check("log tail finishes a line and never splits a character", t.lines.last?.text == "halfé")
+        write(Data("fresh\n".utf8), append: false)
+        t.stop(); t.start()
+        check("log tail notices a file that was reset", t.lines.last?.text == "fresh")
+        try? FileManager.default.removeItem(atPath: path)
+        t.stop(); t.start()
+        check("log tail says when the file is gone", t.note != nil)
+        t.stop()
+    }
+
     print(failed == 0 ? "selftest passed (\(passed) checks)" : "selftest FAILED (\(failed) of \(passed + failed))")
     exit(failed == 0 ? 0 : 1)
 }

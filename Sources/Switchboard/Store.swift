@@ -26,6 +26,7 @@ final class Store: ObservableObject {
     @Published private(set) var mapOffsets: [String: CGSize] = [:]   // where you dragged map nodes
     @Published private(set) var mapPan: CGSize = .zero
     @Published private(set) var mapZoom: CGFloat = 1
+    @Published var logs: LogTail?
     @Published var showMap: Bool { didSet { UserDefaults.standard.set(showMap, forKey: "showMap"); if showMap { Task { await refresh() } } } }
     @Published var showAll = false
     @Published var message: String?
@@ -451,7 +452,7 @@ final class Store: ObservableObject {
 
     /// ⌘ shortcuts act on the row under the pointer. Returns true if one was handled.
     func shortcut(_ ch: String, deleteKey: Bool) -> Bool {
-        guard let key = activeKey else { return false }
+        guard logs == nil, let key = activeKey else { return false }   // in the log screen ⌘C copies the selected text
         if let e = entries.first(where: { $0.key == key }) {
             if deleteKey { kill(e); return true }
             switch ch {
@@ -606,8 +607,32 @@ final class Store: ObservableObject {
 
     func forget(_ k: KnownServer) { known[k.key] = nil; stopped.removeAll { $0.key == k.key }; dirty = true; persist(force: true) }
 
+    /// Logs open inside the popover. Terminal is still there for people who want it.
     func tail(_ e: PortEntry) {
+        if logs?.key == e.key { return }
+        do {
+            let t = LogTail(source: try Actions.logSource(e), title: "\(displayName(e)) :\(e.port)", key: e.key)
+            logs?.stop()
+            t.start()
+            withAnimation(Motion.anim) { logs = t }
+        } catch { flash(error.localizedDescription) }
+    }
+
+    func closeLogs() {
+        logs?.stop()
+        withAnimation(Motion.anim) { logs = nil }
+    }
+
+    func openLogsInTerminal() {
+        guard let e = entries.first(where: { $0.key == logs?.key }) else { flash("This server has stopped."); return }
         do { try Actions.tail(e) } catch { flash(error.localizedDescription) }
+    }
+
+    /// Esc in the log screen: clear the filter first, then go back. Returns true if it did something.
+    func escapeLogs() -> Bool {
+        guard let t = logs else { return false }
+        if !t.query.isEmpty { t.query = "" } else { closeLogs() }
+        return true
     }
 
     private func perform(_ key: String, label: String, success: String, undo: UndoAction? = nil, settle: Double = 0.6, _ work: @escaping () async throws -> Void) {
