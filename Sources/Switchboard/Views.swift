@@ -202,6 +202,9 @@ struct RootView: View {
                     Toggle("Show stopped servers", isOn: $store.showStopped)
                     Toggle("Notify when a server stops", isOn: $store.notifyOnStop)
                     Toggle("Show system & apps", isOn: $store.showAll)
+                    Picker("Terminal for logs", selection: Binding(get: { store.logTerminal }, set: { store.setLogTerminal($0) })) {
+                        ForEach(TerminalApp.installed) { Text($0.name).tag($0) }
+                    }
                     Toggle("Launch at login", isOn: Binding(get: { store.launchAtLogin }, set: { store.launchAtLogin = $0 }))
                     Divider()
                     Button("Quit Switchboard") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")

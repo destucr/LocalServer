@@ -635,6 +635,12 @@ final class Store: ObservableObject {
         return TerminalApp.installed.first { $0.id == id } ?? TerminalApp.installed.first ?? .fallback
     }
 
+    /// Picked in the settings menu: remembered without opening anything.
+    func setLogTerminal(_ app: TerminalApp) {
+        UserDefaults.standard.set(app.id, forKey: "logTerminal")
+        objectWillChange.send()
+    }
+
     /// Hands a server's log to a terminal app and remembers the choice.
     func tailInTerminal(_ e: PortEntry, _ app: TerminalApp) {
         do { try Actions.tail(e, in: app); UserDefaults.standard.set(app.id, forKey: "logTerminal"); objectWillChange.send() }
