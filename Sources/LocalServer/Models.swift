@@ -45,6 +45,11 @@ struct PortEntry: Identifiable, Hashable {
     var container: DockerContainer?
     var web: WebKind
     var restart: RestartSpec?
+    var status: Int? = nil   // HTTP status of GET /
+    var ms: Int? = nil       // response time of GET /
+
+    /// Stable identity across restarts and PID changes.
+    var key: String { "\(projectPath ?? container?.name ?? title):\(port)" }
 
     /// What Copy puts on the clipboard, and what the row shows so you can see it first.
     var address: String {
@@ -58,4 +63,33 @@ struct PortEntry: Identifiable, Hashable {
     var copyLabel: String { address.contains("://") ? "Copy URL" : "Copy address" }
 
     var localURL: URL { URL(string: "\(port == 443 || port == 8443 ? "https" : "http")://localhost:\(port)")! }
+}
+
+/// How to start a server again. Deliberately has no environment variables, so no secrets reach the disk.
+struct KnownStart: Codable, Hashable {
+    var exec: String
+    var argv: [String]
+    var cwd: String
+}
+
+/// A server we saw running before. Shown as a grey row with a Start button once it stops.
+struct KnownServer: Codable, Hashable, Identifiable {
+    var key: String
+    var port: Int
+    var title: String
+    var group: String
+    var projectPath: String?
+    var start: KnownStart?
+    var containerID: String?
+    var lastSeen: Date
+    var id: String { key }
+    var canStart: Bool { start != nil || containerID != nil }
+}
+
+struct ProjectGroup: Identifiable {
+    var name: String
+    var path: String?
+    var running: [PortEntry]
+    var stopped: [KnownServer]
+    var id: String { name }
 }

@@ -56,14 +56,18 @@ enum Scanner {
     /// Ask each candidate port what it serves, in parallel (≤ ~1s total).
     private static func probeWebKinds(_ entries: inout [PortEntry]) {
         let jobs = entries.indices.filter { entries[$0].web != .none }.map { ($0, entries[$0].pid, entries[$0].port, entries[$0].host) }
-        var results = [WebKind](repeating: .none, count: jobs.count)
+        var results = [ProbeResult](repeating: ProbeResult(kind: .none, status: nil, ms: nil), count: jobs.count)
         let lock = NSLock()
         DispatchQueue.concurrentPerform(iterations: jobs.count) { n in
             let j = jobs[n]
-            let k = Probe.kind(pid: j.1, port: j.2, host: j.3)
-            lock.lock(); results[n] = k; lock.unlock()
+            let r = Probe.check(pid: j.1, port: j.2, host: j.3)
+            lock.lock(); results[n] = r; lock.unlock()
         }
-        for (n, j) in jobs.enumerated() { entries[j.0].web = results[n] }
+        for (n, j) in jobs.enumerated() {
+            entries[j.0].web = results[n].kind
+            entries[j.0].status = results[n].status
+            entries[j.0].ms = results[n].ms
+        }
     }
 
     // MARK: lsof

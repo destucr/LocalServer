@@ -52,20 +52,48 @@ enum Actions {
         guard let spec = e.restart, let pid = e.pid else { throw ActionError.message("Nothing to restart") }
         try await terminate(pids: unique([spec.rootPid, pid]))
 
-        let logDir = NSHomeDirectory() + "/Library/Logs/LocalServer"
-        try? FileManager.default.createDirectory(atPath: logDir, withIntermediateDirectories: true)
-        let slug = (e.projectName ?? e.title).lowercased().map { $0.isLetter || $0.isNumber ? String($0) : "-" }.joined()
-        let logPath = "\(logDir)/\(slug)-\(e.port).log"
-        FileManager.default.createFile(atPath: logPath, contents: nil)
-        guard let log = FileHandle(forWritingAtPath: logPath) else { throw ActionError.message("Cannot open log file") }
-        log.seekToEndOfFile()
-        log.write(Data("\n--- restarted \(Date()) ---\n".utf8))
+        let log = try openLog(e.group, e.port, label: "restarted")
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: spec.exec)
         p.arguments = Array(spec.argv.dropFirst())
         p.environment = spec.env
         p.currentDirectoryURL = URL(fileURLWithPath: spec.cwd)
+        p.standardInput = FileHandle.nullDevice
+        p.standardOutput = log
+        p.standardError = log
+        do { try p.run() } catch { throw ActionError.message("Launch failed: \(error.localizedDescription)") }
+    }
+
+    /// One log file per server, appended to. A restarted or started server writes here, so Logs can follow it.
+    private static func openLog(_ name: String, _ port: Int, label: String) throws -> FileHandle {
+        let dir = NSHomeDirectory() + "/Library/Logs/LocalServer"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let slug = name.lowercased().map { $0.isLetter || $0.isNumber ? String($0) : "-" }.joined()
+        let path = "\(dir)/\(slug)-\(port).log"
+        if !FileManager.default.fileExists(atPath: path) { FileManager.default.createFile(atPath: path, contents: nil) }
+        guard let log = FileHandle(forWritingAtPath: path) else { throw ActionError.message("Cannot open the log file") }
+        log.seekToEndOfFile()
+        log.write(Data("\n--- \(label) \(Date()) ---\n".utf8))
+        return log
+    }
+
+    // MARK: Start (a server that is not running)
+
+    static func start(_ k: KnownServer) async throws {
+        if let id = k.containerID {
+            guard let bin = Docker.binary else { throw ActionError.message("docker not found") }
+            let r = await Task.detached { runCapture(bin, ["start", id], timeout: 30) }.value
+            if r.status != 0 { throw ActionError.message("docker start failed. Was the container removed?") }
+            return
+        }
+        guard let s = k.start else { throw ActionError.message("LocalServer doesn't know how this was started") }
+        guard FileManager.default.fileExists(atPath: s.cwd) else { throw ActionError.message("The folder is gone: \(abbreviateHome(s.cwd))") }
+        let log = try openLog(k.group, k.port, label: "started")
+        let cmd = ([s.exec] + s.argv.dropFirst()).map(shellQuote).joined(separator: " ")
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        p.arguments = ["-lic", "cd \(shellQuote(s.cwd)) && exec \(cmd)"]   // login shell so nvm, pyenv, etc. are on PATH
         p.standardInput = FileHandle.nullDevice
         p.standardOutput = log
         p.standardError = log

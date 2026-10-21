@@ -1,11 +1,17 @@
 import SwiftUI
 
+// Colors come from the system so light and dark mode both keep their contrast.
+private extension Color {
+    static let listBackground = Color(nsColor: .textBackgroundColor)
+    static let band = Color(nsColor: .windowBackgroundColor)
+}
+
 struct RootView: View {
     @EnvironmentObject var store: Store
     @FocusState private var filterFocused: Bool
 
     // Fixed so the popover never changes size while you filter or toggle.
-    private let listHeight: CGFloat = 420
+    private let listHeight: CGFloat = 440
 
     var body: some View {
         VStack(spacing: 0) {
@@ -13,7 +19,7 @@ struct RootView: View {
             Divider()
             VStack(spacing: 0) {
                 if let port = store.portQuery { PortCard(port: port) }
-                if store.visible.isEmpty {
+                if store.groups.isEmpty {
                     if store.portQuery == nil {
                         VStack(spacing: 6) {
                             Image(systemName: "powersleep").font(.title2).foregroundStyle(.secondary)
@@ -26,11 +32,12 @@ struct RootView: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                            ForEach(store.groups, id: \.name) { g in
+                            ForEach(store.groups) { g in
                                 Section {
-                                    ForEach(g.entries) { RowView(entry: $0) }
+                                    ForEach(g.running) { RowView(entry: $0) }
+                                    ForEach(g.stopped) { StoppedRow(server: $0) }
                                 } header: {
-                                    GroupHeader(name: g.name, path: g.path)
+                                    GroupHeader(group: g)
                                 }
                             }
                         }
@@ -42,6 +49,7 @@ struct RootView: View {
             footer
         }
         .frame(width: 470)
+        .background(Color.listBackground)
         .onReceive(NotificationCenter.default.publisher(for: .popoverDidShow)) { _ in
             store.query = ""
             filterFocused = true
@@ -64,14 +72,18 @@ struct RootView: View {
     private var footer: some View {
         VStack(spacing: 0) {
             if let m = store.message {
-                Text(m).font(.caption).foregroundStyle(.secondary)
+                Text(m).font(.caption).foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(.quaternary.opacity(0.5))
+                    .background(Color.band)
                     .transition(.opacity)
             }
-            HStack {
-                Text("\(store.visible.count) listening").font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Text("\(store.count) running").font(.caption).foregroundStyle(.secondary)
+                if !store.stopped.isEmpty {
+                    Button(store.showStopped ? "Hide stopped" : "Show \(store.stopped.count) stopped") { store.showStopped.toggle() }
+                        .buttonStyle(.plain).font(.caption).foregroundStyle(Color.accentColor)
+                }
                 Spacer()
                 Menu {
                     Button("About LocalServer \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")") {
@@ -80,6 +92,8 @@ struct RootView: View {
                     }
                     Text("Shortcut: \(AppDelegate.shortcutLabel)")
                     Divider()
+                    Toggle("Show stopped servers", isOn: $store.showStopped)
+                    Toggle("Notify when a server stops", isOn: $store.notifyOnStop)
                     Toggle("Show system & apps", isOn: $store.showAll)
                     Toggle("Launch at login", isOn: Binding(get: { store.launchAtLogin }, set: { store.launchAtLogin = $0 }))
                     Divider()
@@ -93,7 +107,7 @@ struct RootView: View {
     }
 }
 
-/// "Is port N free? Who has it? What's the next one?" — shown when the filter is a port number.
+/// "Is port N free? Who has it? What's the next one?" Shown when the filter is a port number.
 struct PortCard: View {
     @EnvironmentObject var store: Store
     let port: Int
@@ -119,27 +133,44 @@ struct PortCard: View {
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background((inUse ? Color.orange : Color.green).opacity(0.10))
+        .background((inUse ? Color.orange : Color.green).opacity(0.12))
     }
 }
 
 struct GroupHeader: View {
-    let name: String
-    let path: String?
+    @EnvironmentObject var store: Store
+    let group: ProjectGroup
+
+    private var restartable: Int { group.running.filter { $0.container != nil || $0.restart != nil }.count }
+    private var stoppable: Int { group.running.filter { $0.kind != .other }.count }
+    private var startable: Int { group.stopped.filter(\.canStart).count }
+
     var body: some View {
         HStack(spacing: 6) {
-            Text(name.uppercased()).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
-            if let path {
-                Spacer()
-                Button { NSWorkspace.shared.open(URL(fileURLWithPath: path)) } label: { Image(systemName: "folder") }
-                    .buttonStyle(.borderless).help(abbreviateHome(path))
-            } else {
-                Spacer()
+            if group.name == "Pinned" { Image(systemName: "pin.fill").font(.system(size: 10)).foregroundStyle(.secondary) }
+            Text(group.name.uppercased()).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+            Spacer()
+            Menu {
+                if let path = group.path {
+                    ForEach(Editors.installed, id: \.name) { ed in
+                        Button("Open in \(ed.name)") { store.openProject(path, in: ed.url) }
+                    }
+                    Button("Open Terminal here") { Editors.openTerminal(at: path) }
+                    Button("Show in Finder") { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
+                    Divider()
+                }
+                if startable > 0 { Button("Start \(startable) stopped") { store.startAll(group) } }
+                if restartable > 0 { Button("Restart \(restartable) running") { store.restartAll(group) } }
+                if stoppable > 0 { Button("Stop all \(stoppable)…") { store.stopAll(group) } }
+            } label: {
+                Image(systemName: "ellipsis.circle").foregroundStyle(.secondary).frame(width: 22, height: 18).contentShape(Rectangle())
             }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .help(group.path.map { "Project actions for \(abbreviateHome($0))" } ?? "Group actions")
         }
-        .padding(.horizontal, 12).padding(.vertical, 5)
+        .padding(.horizontal, 12).padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial)
+        .background(Color.band)
     }
 }
 
@@ -155,7 +186,7 @@ struct RowView: View {
     }
 
     private var armed: Bool { store.armedKill == entry.id }
-    private var busyLabel: String? { store.busy[entry.id] }
+    private var busyLabel: String? { store.busy[entry.key] }
     private var copied: Bool { store.copiedID == entry.id }
     private var canRestart: Bool { entry.container != nil || entry.restart != nil }
 
@@ -167,16 +198,21 @@ struct RowView: View {
                 .frame(width: 58, alignment: .leading)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
-                    Text(entry.title).font(.system(size: 13)).lineLimit(1)
+                    Text(store.displayName(entry)).font(.system(size: 13)).lineLimit(1)
+                    if store.isRenamed(entry) {
+                        Text(entry.title).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+                    }
                     if entry.web == .api {
                         Text("API").font(.system(size: 9, weight: .bold)).padding(.horizontal, 4).padding(.vertical, 1)
-                            .background(.secondary.opacity(0.18), in: Capsule()).foregroundStyle(.secondary)
+                            .background(.secondary.opacity(0.2), in: Capsule()).foregroundStyle(.secondary)
                             .help("Answers HTTP but not with a web page")
                     }
+                    health
                     if entry.lanExposed {
                         Image(systemName: "wifi").font(.system(size: 9)).foregroundStyle(.orange)
                             .help("Anyone on your network can reach this server (it listens on all interfaces)")
                     }
+                    if store.isPinned(entry.key) { Image(systemName: "pin.fill").font(.system(size: 8)).foregroundStyle(.secondary) }
                 }
                 // Show exactly what the button will copy, so there is nothing to guess.
                 if entry.web != .page {
@@ -196,7 +232,7 @@ struct RowView: View {
                 } else if hover {
                     secondaryActions
                 } else if let up = entry.uptime {
-                    Text("up \(up)").font(.caption).foregroundStyle(.tertiary).lineLimit(1).fixedSize()
+                    Text("up \(up)").font(.caption).foregroundStyle(.secondary).lineLimit(1).fixedSize()
                         .help("Running for \(up)")
                 }
                 mainButton
@@ -204,9 +240,19 @@ struct RowView: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
         .frame(height: 44)
-        .background(hover ? Color.primary.opacity(0.06) : .clear)
+        .background(hover ? Color.primary.opacity(0.07) : .clear)
         .onHover { hover = $0 }
         .help("PID \(entry.pid.map(String.init) ?? "-")  \(entry.command)")
+    }
+
+    @ViewBuilder private var health: some View {
+        if let s = entry.status, let ms = entry.ms {
+            if s >= 500 {
+                Text("\(s)").font(.system(size: 10, weight: .bold)).foregroundStyle(.red).help("The server answered HTTP \(s)")
+            } else {
+                Text("\(ms) ms").font(.system(size: 10)).foregroundStyle(.secondary).help("HTTP \(s) in \(ms) ms")
+            }
+        }
     }
 
     @ViewBuilder private var mainButton: some View {
@@ -229,15 +275,13 @@ struct RowView: View {
 
     private var secondaryActions: some View {
         HStack(spacing: 0) {
-            if entry.web == .api {
-                IconButton(symbol: "arrow.up.forward.square", help: "Open \(entry.address) in your browser") { store.open(entry) }
-            }
             IconButton(symbol: "arrow.clockwise", help: canRestart ? "Restart with the same command" : "Can't restart: LocalServer doesn't know how this was started")
                 { store.restart(entry) }
                 .disabled(!canRestart)
             IconButton(symbol: "text.alignleft", help: "Follow the logs in Terminal") { store.tail(entry) }
             shareMenu
-            IconButton(symbol: "stop.fill", help: "Stop this server", tint: Color.red.opacity(0.75)) { store.kill(entry) }
+            IconButton(symbol: "stop.fill", help: "Stop this server", tint: Color.red.opacity(0.8)) { store.kill(entry) }
+            moreMenu
         }
     }
 
@@ -248,6 +292,7 @@ struct RowView: View {
             Button(entry.lanExposed ? "Copy link for your Wi-Fi:  \(lan)" : "Copy link for your Wi-Fi (won't work, localhost only)") {
                 store.copyLAN(entry)
             }
+            Button("Show QR code to open on your phone…") { store.showQR(entry) }
             Divider()
             if tunnels.tunnels[entry.port] != nil {
                 Button("Stop the internet link") { store.toggleTunnel(entry) }
@@ -262,6 +307,63 @@ struct RowView: View {
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         .disabled(entry.web == .none)
         .help("Share this server")
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            Button(store.isPinned(entry.key) ? "Unpin" : "Pin to top") { store.togglePin(entry) }
+            Button("Rename…") { store.rename(entry) }
+            if entry.web == .api { Button("Open \(entry.address) in browser") { store.open(entry) } }
+            if let path = entry.projectPath {
+                Divider()
+                ForEach(Editors.installed, id: \.name) { ed in Button("Open project in \(ed.name)") { store.openProject(path, in: ed.url) } }
+                Button("Open Terminal in project") { Editors.openTerminal(at: path) }
+            }
+        } label: {
+            Image(systemName: "ellipsis").frame(width: 22, height: 22).contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+        .help("More: pin, rename, open project")
+    }
+}
+
+/// A server that ran before and is not running now.
+struct StoppedRow: View {
+    @EnvironmentObject var store: Store
+    let server: KnownServer
+    @State private var hover = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle().strokeBorder(Color.secondary, lineWidth: 1).frame(width: 7, height: 7)
+            Text(String(server.port)).font(.system(size: 15, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.secondary).frame(width: 58, alignment: .leading)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(store.names[server.key] ?? server.title).font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
+                Text("stopped").font(.system(size: 10.5)).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 4)
+            if let label = store.busy[server.key] {
+                Text(label).font(.caption).foregroundStyle(.secondary)
+                ProgressView().controlSize(.small)
+            } else {
+                if hover {
+                    IconButton(symbol: store.isPinned(server.key) ? "pin.slash" : "pin", help: store.isPinned(server.key) ? "Unpin" : "Pin to top") { store.togglePin(server) }
+                    IconButton(symbol: "xmark", help: "Forget this server") { store.forget(server) }
+                }
+                if server.canStart {
+                    Button { store.start(server) } label: { Text("Start").frame(width: 78) }
+                        .controlSize(.small).buttonStyle(.borderedProminent)
+                        .help(server.containerID != nil ? "Start this container again" : "Run it again in \(abbreviateHome(server.start?.cwd ?? ""))")
+                } else {
+                    Text("not running").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 5)
+        .frame(height: 44)
+        .background(hover ? Color.primary.opacity(0.07) : .clear)
+        .onHover { hover = $0 }
     }
 }
 
@@ -278,7 +380,7 @@ struct TunnelLine: View {
             case .failed(let why): Text("Public link failed (\(why))")
             }
         }
-        .font(.caption).foregroundStyle(.blue).lineLimit(1)
+        .font(.caption).foregroundStyle(Color.accentColor).lineLimit(1)
     }
 }
 
@@ -292,7 +394,7 @@ struct IconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol).frame(width: 22, height: 22).contentShape(Rectangle())
-                .foregroundStyle(tint ?? (enabled ? Color.primary : Color.secondary.opacity(0.4)))
+                .foregroundStyle(tint ?? (enabled ? Color.primary : Color.secondary.opacity(0.5)))
         }
         .buttonStyle(.borderless)
         .help(help)

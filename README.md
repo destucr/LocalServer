@@ -2,20 +2,25 @@
 
 A small Mac app that lives in your menu bar and shows every port your computer is listening on. Vite, Laravel, Next.js, Docker, Postgres, whatever you have running. Each one is shown with the project it belongs to, and you can open, restart, read the logs, share or stop it with one click.
 
-<p align="center"><img src="docs/screenshot.png" width="420" alt="LocalServer popover listing ports grouped by project"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
+    <img src="docs/screenshot-light.png" width="470" alt="LocalServer popover listing ports grouped by project">
+  </picture>
+</p>
 
 ## What you get
 
 - **Ports grouped by project.** The app looks at where each process was started to find its project.
-- **It knows what is running.** Vite, Next.js, Nuxt, Astro, Laravel, Django, Rails and more. Databases like PostgreSQL, MySQL, Redis and MongoDB too.
-- **Docker support.** Containers show up on their ports, grouped by compose project.
-- **A clear button on every row.** If the port serves a web page you get **Open**. If it is an API or a database you get **Copy**.
-- **More actions when you hover a row:**
-  - **Restart** brings the process back with the same command, folder and environment.
-  - **Logs** follows the log file in Terminal (or `docker logs -f` for containers).
-  - **Share** copies the localhost or network URL, or starts a public tunnel.
-  - **Stop** shuts it down. For databases and containers it asks you to click twice.
-- **Port checker.** Type a port number like `3000` in the search box. It tells you if the port is free, who is using it, and which port to use next.
+- **It knows what is running.** Vite, Next.js, Nuxt, Astro, Laravel, Django, Rails and more. Databases like PostgreSQL, MySQL, Redis and MongoDB too. Docker containers show up on their ports.
+- **A clear button on every row.** If the port serves a web page you get **Open**. If it is an API or a database you get **Copy URL**, and the exact address is written under the name so you can see what you copy.
+- **Health at a glance.** Each web server shows how fast it answers. A red number means the server is returning an error.
+- **Stopped servers stay on the list.** Stop something, or reboot, and it shows as a grey row with a **Start** button. LocalServer remembers the command and the folder, never your environment variables.
+- **Whole project actions.** The menu on each project header can open the project in your editor or Terminal, and start, restart or stop everything in it at once.
+- **Phone testing.** Share menu, then "Show QR code". Scan it and the page opens on your phone (same Wi-Fi).
+- **Hover a row for more.** Restart (same command, folder and environment), Logs (follows the log file in Terminal), Share, Stop, and a menu to pin or rename the row.
+- **Alerts.** You get a notification when a server stops and you did not stop it. You can turn this off in the gear menu.
+- **Port checker.** Type a port like `3000` in the search box. It tells you if the port is free, who is using it, and the next free port.
 - **Global shortcut.** Press `Control + Option + P` from anywhere. The search box is ready, so type and press Return.
 - **Quiet by default.** System apps like ControlCenter and Raycast are hidden. You can turn them on from the gear menu.
 

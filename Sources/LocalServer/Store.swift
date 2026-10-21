@@ -2,36 +2,76 @@ import AppKit
 import ServiceManagement
 import SwiftUI
 
+/// Everything worth remembering between launches. No environment variables, so no secrets.
+private struct SavedState: Codable {
+    var known: [String: KnownServer] = [:]
+    var names: [String: String] = [:]
+    var pinned: Set<String> = []
+}
+
 @MainActor
 final class Store: ObservableObject {
     @Published private(set) var entries: [PortEntry] = []
+    @Published private(set) var stopped: [KnownServer] = []
     @Published var query = ""
     @Published var showAll = false
     @Published var message: String?
-    @Published var busy: [String: String] = [:]   // row id → what it is doing, e.g. "Restarting…"
+    @Published var busy: [String: String] = [:]   // row key → what it is doing, e.g. "Restarting…"
     @Published var copiedID: String?
     @Published var armedKill: String?
+    @Published private(set) var names: [String: String] = [:]
+    @Published private(set) var pinned: Set<String> = []
+    @Published var showStopped: Bool { didSet { UserDefaults.standard.set(showStopped, forKey: "showStopped") } }
+    @Published var notifyOnStop: Bool {
+        didSet { UserDefaults.standard.set(notifyOnStop, forKey: "notifyOnStop"); if notifyOnStop { Notifier.requestPermission() } }
+    }
+
     static let shared = Store()
     let tunnels = TunnelManager()
 
+    private var known: [String: KnownServer] = [:]
+    private var dirty = false
+    private var lastSave = Date()
+    private let persistent: Bool
     private var messageTask: Task<Void, Never>?
 
-    /// Fixed sample data, no polling — used for README screenshots.
-    init(sample: [PortEntry]) { entries = sample }
+    // Crash detection
+    private var watching: [String: PortEntry] = [:]
+    private var missing: [String: Int] = [:]
+    private var expectedStops: [String: Date] = [:]
+
+    /// Fixed sample data, no polling, no disk. Used for README screenshots.
+    init(sample: [PortEntry], stopped: [KnownServer] = [], names: [String: String] = [:], pinned: Set<String> = []) {
+        persistent = false
+        showStopped = true
+        notifyOnStop = false
+        entries = sample
+        self.stopped = stopped
+        self.names = names
+        self.pinned = pinned
+    }
 
     init() {
+        persistent = true
+        let d = UserDefaults.standard
+        showStopped = d.bool(forKey: "showStopped")
+        notifyOnStop = d.object(forKey: "notifyOnStop") as? Bool ?? true
+        load()
+        if notifyOnStop { Notifier.requestPermission() }
+
         Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refresh()
                 try? await Task.sleep(for: .seconds(3))
             }
         }
-        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [tunnels] _ in
-            MainActor.assumeIsolated { tunnels.stopAll() }
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self, tunnels] _ in
+            MainActor.assumeIsolated { tunnels.stopAll(); self?.persist(force: true) }
         }
     }
 
-    /// `3000` typed in the filter → treat it as a port lookup.
+    // MARK: Derived lists
+
     var portQuery: Int? {
         let q = query.trimmingCharacters(in: .whitespaces)
         guard q.count >= 2, q.count <= 5, let n = Int(q), n > 0, n < 65536 else { return nil }
@@ -40,27 +80,124 @@ final class Store: ObservableObject {
 
     var visible: [PortEntry] {
         entries.filter { e in
-            (showAll || e.kind != .other || portQuery == e.port) &&
-            (query.isEmpty || [e.title, e.group, e.command, String(e.port)].contains { $0.localizedCaseInsensitiveContains(query) })
+            (showAll || e.kind != .other || portQuery == e.port) && matches(query, [displayName(e), e.title, e.group, e.command, String(e.port)])
         }
     }
 
-    var groups: [(name: String, path: String?, entries: [PortEntry])] {
-        var order: [String] = []
-        var map: [String: [PortEntry]] = [:]
-        for e in visible {
-            if map[e.group] == nil { order.append(e.group) }
-            map[e.group, default: []].append(e)
-        }
-        return order.map { (name: $0, path: map[$0]?.first?.projectPath, entries: map[$0]!) }
+    private func matches(_ q: String, _ fields: [String]) -> Bool {
+        q.isEmpty || fields.contains { $0.localizedCaseInsensitiveContains(q) }
     }
 
     var count: Int { entries.filter { $0.kind != .other }.count }
 
+    var groups: [ProjectGroup] {
+        let running = visible
+        let runningGroups = Set(running.map { pinned.contains($0.key) ? "Pinned" : $0.group })
+        let stoppedVisible = stopped.filter { k in
+            matches(query, [k.title, k.group, String(k.port)]) &&
+            (showStopped || runningGroups.contains(pinned.contains(k.key) ? "Pinned" : k.group))
+        }
+
+        var order: [String] = []
+        var run: [String: [PortEntry]] = [:]
+        var stop: [String: [KnownServer]] = [:]
+        func name(_ key: String, _ group: String) -> String { pinned.contains(key) ? "Pinned" : group }
+
+        for e in running { let g = name(e.key, e.group); if run[g] == nil { order.append(g) }; run[g, default: []].append(e) }
+        for k in stoppedVisible { let g = name(k.key, k.group); if run[g] == nil && stop[g] == nil { order.append(g) }; stop[g, default: []].append(k) }
+
+        order.sort { a, b in
+            if a == "Pinned" { return true }
+            if b == "Pinned" { return false }
+            return false   // keep the scan's project order
+        }
+        return order.map { g in
+            let path = g == "Pinned" ? nil : (run[g]?.first?.projectPath ?? stop[g]?.first?.projectPath)
+            return ProjectGroup(name: g, path: path, running: run[g] ?? [], stopped: stop[g] ?? [])
+        }
+    }
+
+    func displayName(_ e: PortEntry) -> String { names[e.key] ?? e.title }
+    func isRenamed(_ e: PortEntry) -> Bool { names[e.key] != nil }
+    func isPinned(_ key: String) -> Bool { pinned.contains(key) }
+
+    // MARK: Refresh
+
     func refresh() async {
         let result = await Task.detached(priority: .utility) { Scanner.scan() }.value
         if result != entries { entries = result }
+        guard persistent else { return }
+        remember(result)
+        detectStops(result)
+        persist()
     }
+
+    private func remember(_ list: [PortEntry]) {
+        let now = Date()
+        let runningKeys = Set(list.map(\.key))
+
+        for e in list where e.kind == .dev || e.kind == .docker {
+            let k = KnownServer(key: e.key, port: e.port, title: e.title, group: e.group, projectPath: e.projectPath,
+                                start: e.restart.map { KnownStart(exec: $0.exec, argv: $0.argv, cwd: $0.cwd) },
+                                containerID: e.container?.id, lastSeen: now)
+            var old = known[e.key]
+            old?.lastSeen = now
+            if old != k { dirty = true }
+            known[e.key] = k
+
+            // Same server came back on another port (Vite does this): drop the old grey row.
+            for (ok, o) in known where ok != e.key && !runningKeys.contains(ok) && o.title == e.title
+                && o.projectPath == e.projectPath && o.start?.cwd == k.start?.cwd && k.start != nil {
+                known[ok] = nil; dirty = true
+            }
+        }
+        let cutoff = now.addingTimeInterval(-14 * 86400)
+        for (k, v) in known where v.lastSeen < cutoff { known[k] = nil; dirty = true }
+
+        let s = known.values.filter { !runningKeys.contains($0.key) }
+            .sorted { ($0.group.lowercased(), $0.port) < ($1.group.lowercased(), $1.port) }
+        if s != stopped { stopped = s }
+    }
+
+    /// A server that was listening and is gone for two scans in a row, without us stopping it.
+    private func detectStops(_ list: [PortEntry]) {
+        let now = Set(list.filter { $0.kind != .other }.map(\.key))
+        for k in now { missing[k] = nil }
+        for (k, e) in Array(watching) where !now.contains(k) {
+            let n = (missing[k] ?? 0) + 1
+            if n >= 2 {
+                watching[k] = nil; missing[k] = nil
+                let expected = expectedStops[k].map { Date().timeIntervalSince($0) < 120 } ?? false
+                if notifyOnStop, !expected {
+                    Notifier.post(title: "\(names[k] ?? e.title) stopped", body: "Port \(e.port) in \(e.group) is no longer listening.")
+                }
+            } else { missing[k] = n }
+        }
+        for e in list where e.kind != .other { watching[e.key] = e }
+    }
+
+    // MARK: Persistence
+
+    private var stateURL: URL {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("LocalServer")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("state.json")
+    }
+
+    private func load() {
+        guard let data = try? Data(contentsOf: stateURL), let s = try? JSONDecoder().decode(SavedState.self, from: data) else { return }
+        known = s.known; names = s.names; pinned = s.pinned
+    }
+
+    private func persist(force: Bool = false) {
+        guard persistent, dirty || force, force || Date().timeIntervalSince(lastSave) > 2 else { return }
+        dirty = false; lastSave = Date()
+        if let data = try? JSONEncoder().encode(SavedState(known: known, names: names, pinned: pinned)) {
+            try? data.write(to: stateURL, options: .atomic)
+        }
+    }
+
+    // MARK: Messages
 
     func flash(_ text: String) {
         message = text
@@ -71,7 +208,7 @@ final class Store: ObservableObject {
         }
     }
 
-    // MARK: Actions
+    // MARK: Row actions
 
     func open(_ e: PortEntry) { NSWorkspace.shared.open(e.localURL) }
 
@@ -79,33 +216,47 @@ final class Store: ObservableObject {
     func primary(_ e: PortEntry) { e.web == .page ? open(e) : copyLocal(e) }
 
     func kill(_ e: PortEntry) {
-        // Databases need a second click; everything else is one click.
         if e.kind == .database || e.kind == .other || e.container != nil, armedKill != e.id {
             armedKill = e.id
             Task { try? await Task.sleep(for: .seconds(3)); if armedKill == e.id { armedKill = nil } }
             return
         }
         armedKill = nil
-        perform(e, label: "Stopping…", success: "Stopped :\(e.port)") { try await Actions.kill(e) }
+        expectedStops[e.key] = Date()
+        perform(e.key, label: "Stopping…", success: "Stopped :\(e.port). Press Start to bring it back.") { try await Actions.kill(e) }
     }
 
     func restart(_ e: PortEntry) {
-        perform(e, label: "Restarting…", success: e.container == nil ? "Restarted :\(e.port). Its output is saved in ~/Library/Logs/LocalServer, so Logs works now." : "Restarted :\(e.port)") { try await Actions.restart(e) }
+        expectedStops[e.key] = Date()
+        perform(e.key, label: "Restarting…",
+                success: e.container == nil ? "Restarted :\(e.port). Its output is saved in ~/Library/Logs/LocalServer, so Logs works now." : "Restarted :\(e.port)") {
+            try await Actions.restart(e)
+        }
     }
+
+    func start(_ k: KnownServer) {
+        perform(k.key, label: "Starting…", success: "Starting \(k.title) on :\(k.port). It can take a few seconds to show up.", settle: 2.0) {
+            try await Actions.start(k)
+        }
+    }
+
+    func forget(_ k: KnownServer) { known[k.key] = nil; stopped.removeAll { $0.key == k.key }; dirty = true; persist(force: true) }
 
     func tail(_ e: PortEntry) {
         do { try Actions.tail(e) } catch { flash(error.localizedDescription) }
     }
 
-    private func perform(_ e: PortEntry, label: String, success: String, _ work: @escaping () async throws -> Void) {
-        busy[e.id] = label
+    private func perform(_ key: String, label: String, success: String, settle: Double = 0.6, _ work: @escaping () async throws -> Void) {
+        busy[key] = label
         Task {
             do { try await work(); flash(success) } catch { flash(error.localizedDescription) }
-            try? await Task.sleep(for: .milliseconds(600))
+            try? await Task.sleep(for: .seconds(settle))
             await refresh()
-            busy[e.id] = nil
+            busy[key] = nil
         }
     }
+
+    // MARK: Copy and share
 
     func copyLocal(_ e: PortEntry) {
         Actions.copy(e.address)
@@ -113,23 +264,90 @@ final class Store: ObservableObject {
         markCopied(e.id)
     }
 
-    /// Makes the row's button say "Copied" for a moment.
     func markCopied(_ id: String) {
         copiedID = id
         Task { try? await Task.sleep(for: .seconds(1.6)); if copiedID == id { copiedID = nil } }
     }
 
     func copyLAN(_ e: PortEntry) {
-        guard let ip = Actions.lanAddress() else { flash("No LAN address found"); return }
+        guard let ip = Actions.lanAddress() else { flash("No network address found"); return }
         let url = "http://\(ip):\(e.port)"
         Actions.copy(url)
         flash(e.lanExposed ? "Copied \(url). Anyone on your Wi-Fi can open it." : "Copied \(url), but this server only listens on localhost, so other devices can't reach it.")
+    }
+
+    func showQR(_ e: PortEntry) {
+        guard let ip = Actions.lanAddress() else { flash("No network address found. Connect to Wi-Fi first."); return }
+        let url = "http://\(ip):\(e.port)"
+        let note = e.lanExposed
+            ? "Scan with your phone's camera. The phone must be on the same Wi-Fi."
+            : "Heads up: this server only listens on localhost, so a phone can't reach it yet. Start it with a host option, for example --host 0.0.0.0."
+        if Dialogs.qr(title: "Open \(displayName(e)) on your phone", url: url, note: note) { Actions.copy(url); flash("Copied \(url)") }
     }
 
     func toggleTunnel(_ e: PortEntry) {
         if tunnels.tunnels[e.port] != nil { tunnels.stop(port: e.port); return }
         do { try tunnels.start(port: e.port); flash("Starting a public link. It is copied as soon as it is ready.") } catch { flash(error.localizedDescription) }
     }
+
+    // MARK: Names and pins
+
+    func togglePin(_ e: PortEntry) { setPinned(e.key, !pinned.contains(e.key)) }
+    func togglePin(_ k: KnownServer) { setPinned(k.key, !pinned.contains(k.key)) }
+
+    private func setPinned(_ key: String, _ on: Bool) {
+        if on { pinned.insert(key) } else { pinned.remove(key) }
+        dirty = true; persist(force: true)
+    }
+
+    func rename(_ e: PortEntry) {
+        guard let new = Dialogs.prompt("Rename :\(e.port)", "Leave empty to go back to “\(e.title)”.", value: names[e.key] ?? "") else { return }
+        names[e.key] = new.isEmpty ? nil : new
+        dirty = true; persist(force: true)
+    }
+
+    // MARK: Whole project
+
+    func stopAll(_ g: ProjectGroup) {
+        let targets = g.running.filter { $0.kind != .other }
+        guard !targets.isEmpty,
+              Dialogs.confirm("Stop \(targets.count) server\(targets.count == 1 ? "" : "s") in \(g.name)?",
+                              targets.map { "\(displayName($0)) :\($0.port)" }.joined(separator: "\n"), ok: "Stop all") else { return }
+        flash("Stopping \(targets.count) server\(targets.count == 1 ? "" : "s")…")
+        for e in targets { expectedStops[e.key] = Date(); busy[e.key] = "Stopping…" }
+        Task {
+            var failed = 0
+            for e in targets { do { try await Actions.kill(e) } catch { failed += 1 } }
+            try? await Task.sleep(for: .milliseconds(600))
+            await refresh()
+            for e in targets { busy[e.key] = nil }
+            flash(failed == 0 ? "Stopped everything in \(g.name)." : "\(failed) server\(failed == 1 ? "" : "s") could not be stopped.")
+        }
+    }
+
+    func restartAll(_ g: ProjectGroup) {
+        let targets = g.running.filter { $0.container != nil || $0.restart != nil }
+        guard !targets.isEmpty else { flash("Nothing here can be restarted."); return }
+        flash("Restarting \(targets.count) server\(targets.count == 1 ? "" : "s")…")
+        for e in targets { expectedStops[e.key] = Date(); busy[e.key] = "Restarting…" }
+        Task {
+            for e in targets { try? await Actions.restart(e) }
+            try? await Task.sleep(for: .seconds(1))
+            await refresh()
+            for e in targets { busy[e.key] = nil }
+            flash("Restarted everything in \(g.name).")
+        }
+    }
+
+    func startAll(_ g: ProjectGroup) {
+        let targets = g.stopped.filter(\.canStart)
+        guard !targets.isEmpty else { return }
+        for k in targets { start(k) }
+    }
+
+    func openProject(_ path: String, in app: URL) { Editors.open(path, with: app) }
+
+    // MARK: Launch at login
 
     var launchAtLogin: Bool {
         get { SMAppService.mainApp.status == .enabled }

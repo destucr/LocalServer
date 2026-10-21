@@ -3,57 +3,69 @@ import Foundation
 
 /// What a listening port answers when asked for `GET /` over plain HTTP.
 enum WebKind: String {
-    case page   // serves HTML — worth opening in a browser
-    case api    // speaks HTTP but not HTML (JSON API, 404 JSON, …)
+    case page   // serves HTML, worth opening in a browser
+    case api    // speaks HTTP but not HTML (JSON API, 404 JSON, ...)
     case none   // not HTTP, or not probed (databases)
+}
+
+struct ProbeResult {
+    var kind: WebKind
+    var status: Int?
+    var ms: Int?
 }
 
 enum Probe {
     private static let lock = NSLock()
-    private static var cache: [String: (kind: WebKind, at: Date)] = [:]
+    private static var cache: [String: (result: ProbeResult, at: Date)] = [:]
 
-    static func kind(pid: Int32?, port: Int, host: String) -> WebKind {
-        if port == 443 || port == 8443 { return .page }
+    static func check(pid: Int32?, port: Int, host: String) -> ProbeResult {
+        if port == 443 || port == 8443 { return ProbeResult(kind: .page, status: nil, ms: nil) }
         let key = "\(pid ?? 0):\(port)"
         lock.lock(); let hit = cache[key]; lock.unlock()
-        if let hit, Date().timeIntervalSince(hit.at) < (hit.kind == .none ? 5 : 60) { return hit.kind }
-        let k = request(port: port, host: host)
-        lock.lock(); cache[key] = (k, Date()); lock.unlock()
-        return k
+        if let hit, Date().timeIntervalSince(hit.at) < (hit.result.kind == .none ? 5 : 8) { return hit.result }
+        let r = request(port: port, host: host)
+        lock.lock(); cache[key] = (r, Date()); lock.unlock()
+        return r
     }
 
-    private static func request(port: Int, host: String) -> WebKind {
+    private static func request(port: Int, host: String) -> ProbeResult {
         let order = host.contains("::1") ? [true, false] : [false, true]
         for v6 in order {
+            let t0 = DispatchTime.now()
             guard let fd = connectLoopback(port: port, v6: v6) else { continue }
             defer { close(fd) }
             let req = "GET / HTTP/1.0\r\nHost: localhost:\(port)\r\nAccept: text/html,*/*\r\nUser-Agent: LocalServer\r\nConnection: close\r\n\r\n"
-            guard send(fd, req, req.utf8.count, 0) > 0 else { return .none }
+            guard send(fd, req, req.utf8.count, 0) > 0 else { return ProbeResult(kind: .none, status: nil, ms: nil) }
 
             var data = Data()
             var buf = [UInt8](repeating: 0, count: 2048)
+            var firstByte: DispatchTime?
             while data.count < 2048 {
                 let n = recv(fd, &buf, buf.count, 0)
                 if n <= 0 { break }
+                if firstByte == nil { firstByte = .now() }
                 data.append(buf, count: n)
                 if data.count > 12, data.range(of: Data("\r\n\r\n".utf8)) != nil { break }
             }
-            return classify(String(decoding: data, as: UTF8.self))
+            let (kind, status) = classify(String(decoding: data, as: UTF8.self))
+            let ms = firstByte.map { Int(($0.uptimeNanoseconds - t0.uptimeNanoseconds) / 1_000_000) }
+            return ProbeResult(kind: kind, status: status, ms: kind == .none ? nil : ms)
         }
-        return .none
+        return ProbeResult(kind: .none, status: nil, ms: nil)
     }
 
-    static func classify(_ response: String) -> WebKind {
-        guard response.hasPrefix("HTTP/") else { return .none }
+    static func classify(_ response: String) -> (WebKind, Int?) {
+        guard response.hasPrefix("HTTP/") else { return (.none, nil) }
+        let status = response.split(separator: " ", maxSplits: 2).dropFirst().first.flatMap { Int($0) }
         let lower = response.lowercased()
         let headEnd = lower.range(of: "\r\n\r\n")?.lowerBound ?? lower.endIndex
         let headers = lower[..<headEnd]
         if headers.contains("content-type:") {
             let line = headers.components(separatedBy: "\r\n").first { $0.hasPrefix("content-type:") } ?? ""
-            return line.contains("html") ? .page : .api
+            return (line.contains("html") ? .page : .api, status)
         }
         let body = lower[headEnd...].drop { $0.isWhitespace }
-        return body.hasPrefix("<!doctype html") || body.hasPrefix("<html") ? .page : .api
+        return (body.hasPrefix("<!doctype html") || body.hasPrefix("<html") ? .page : .api, status)
     }
 
     private static func connectLoopback(port: Int, v6: Bool) -> Int32? {
