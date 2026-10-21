@@ -4,6 +4,8 @@ All notable changes to Switchboard. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-21
+
 ### Added
 - Starting a server whose port is taken now says who holds it and offers to start on the next free port. Start stack and Start project skip taken ports and tell you which.
 - MIT license.
