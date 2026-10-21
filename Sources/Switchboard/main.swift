@@ -1,6 +1,10 @@
 import CoreImage
 import SwiftUI
 import Foundation
+if let first = CommandLine.arguments.dropFirst().first, CLI.commands.contains(first) {
+    exit(CLI.run(Array(CommandLine.arguments.dropFirst())))
+}
+
 if CommandLine.arguments.contains("--scan") {
     for e in Scanner.scan() {
         print("\(e.port)\t\(e.kind.rawValue)\t\(e.title)\t[\(e.group)]\tpid=\(e.pid.map(String.init) ?? "-")\tup=\(e.uptime ?? "-")\tweb=\(e.web.rawValue)\tlan=\(e.lanExposed)\troot=\(e.restart.map { String($0.rootPid) } ?? "-")\t\(e.command.prefix(80))")
@@ -113,6 +117,21 @@ if CommandLine.arguments.contains("--nav-test") {
         s.clearSelection(); print("esc:   selected=\(name(s.selectedKey)) keyboardMode=\(s.keyboardMode)")
         s.query = "next"; print("filter 'next': order =", s.navKeys.map(name).joined(separator: ", "))
         s.moveSelection(-1); print("up with filter: selected=\(name(s.selectedKey)) (first press from nothing goes to the last match)")
+    }
+    exit(0)
+}
+
+// Debug helper: `Switchboard --declared-test <folder>` shows what a switchboard.json gives a machine that has never run the project.
+if let i = CommandLine.arguments.firstIndex(of: "--declared-test"), CommandLine.arguments.count > i + 1 {
+    MainActor.assumeIsolated {
+        let root = (CommandLine.arguments[i + 1] as NSString).expandingTildeInPath
+        guard let file = StackFile.load(root: root) else { print("no file"); return }
+        let declared = Dictionary(file.servers(root: root).map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a })
+        let rows = Store.merge(known: [:], declared: declared, running: [])   // a fresh machine: nothing known, nothing running
+        print("stopped rows:", rows.sorted { $0.port < $1.port }.map { "\($0.title) :\($0.port) [\($0.group)] start=\($0.canStart)" }.joined(separator: " | "))
+        let levels = StartPlan.levels(startable: rows.filter(\.canStart), pool: rows)
+        print("start order:", StartPlan.describe(levels))
+        print("command for api:", rows.first { $0.title == "api" }?.start.map { "cd \(abbreviateHome($0.cwd)) && \($0.exec) \($0.argv.dropFirst().joined(separator: " "))" } ?? "-")
     }
     exit(0)
 }

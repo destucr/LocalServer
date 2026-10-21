@@ -183,6 +183,7 @@ struct RootView: View {
                     }
                     Text("Shortcut: \(AppDelegate.shortcutLabel)")
                     Divider()
+                    Button("Add project folder…") { store.addProject() }
                     Toggle("Show stopped servers", isOn: $store.showStopped)
                     Toggle("Notify when a server stops", isOn: $store.notifyOnStop)
                     Toggle("Show system & apps", isOn: $store.showAll)
@@ -286,6 +287,8 @@ struct GroupHeader: View {
                     Button("Show in Finder") { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
                     Divider()
                 }
+                if group.path != nil { Button("Save stack file…") { store.saveStackFile(group) } }
+                if let p = group.path, store.projects.contains(p) { Button("Remove project") { store.removeProject(p) } }
                 if startable > 0 { Button(startable > 1 ? "Start stack in order (\(startable))" : "Start 1 stopped") { store.startAll(group) } }
                 if restartable > 0 { Button("Restart \(restartable) running") { store.restartAll(group) } }
                 if stoppable > 0 { Button("Stop all \(stoppable)…") { store.stopAll(group) } }

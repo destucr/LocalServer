@@ -83,6 +83,7 @@ struct KnownServer: Codable, Hashable, Identifiable {
     var containerID: String?
     var lastSeen: Date
     var uses: [String]? = nil   // servers this one was seen talking to; decides the start order
+    var containerName: String? = nil   // a name works on any machine; an id does not
     var stopReason: String? = nil   // why it stopped, in one line
     var stoppedAt: Date? = nil
     var id: String { key }

@@ -73,6 +73,17 @@ enum Dialogs {
         return a.runModal() == .alertFirstButtonReturn ? field.stringValue.trimmingCharacters(in: .whitespaces) : nil
     }
 
+    static func chooseFolder(_ message: String) -> String? {
+        NSApp.activate(ignoringOtherApps: true)
+        let p = NSOpenPanel()
+        p.message = message
+        p.canChooseFiles = false
+        p.canChooseDirectories = true
+        p.allowsMultipleSelection = false
+        p.directoryURL = URL(fileURLWithPath: NSHomeDirectory() + "/Projects")
+        return p.runModal() == .OK ? p.url?.path : nil
+    }
+
     /// "Why did it stop?" Shows the reason, the evidence and the last output. Returns the button the user picked.
     static func explain(title: String, headline: String, facts: [String], lines: [String], when: String, buttons: [ExplainChoice]) -> ExplainChoice {
         NSApp.activate(ignoringOtherApps: true)

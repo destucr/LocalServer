@@ -188,3 +188,27 @@ extension Proc {
         return nil
     }
 }
+
+/// Stops done from the command line. The app reads this so it does not report them as unexpected.
+enum ExpectedStops {
+    private static var url: URL {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Switchboard")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("expected-stops.json")
+    }
+
+    private static func read() -> [String: Double] {
+        (try? JSONDecoder().decode([String: Double].self, from: Data(contentsOf: url))) ?? [:]
+    }
+
+    static func mark(_ keys: [String]) {
+        let now = Date().timeIntervalSince1970
+        var m = read().filter { now - $0.value < 600 }
+        for k in keys { m[k] = now }
+        try? JSONEncoder().encode(m).write(to: url, options: .atomic)
+    }
+
+    static func contains(_ key: String) -> Bool {
+        read()[key].map { Date().timeIntervalSince1970 - $0 < 120 } ?? false
+    }
+}

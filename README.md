@@ -19,6 +19,7 @@ A Mac menu bar app that shows every port you have open, with the project it belo
 - **The right button for each server.** Open for web pages, Copy URL for APIs and databases.
 - **See how your servers connect.** The map shows which server talks to which, and warns before you stop something others depend on.
 - **Servers you stopped stay listed.** One click starts a whole project again, in the order its servers depend on each other.
+- **Share your stack.** Save a `switchboard.json` into the repo. A teammate adds the folder and presses Start stack.
 - **Port checker.** Type `3000` to see if it is free and who has it.
 
 ## Install
@@ -28,6 +29,19 @@ brew install --cask destucr/tap/switchboard
 ```
 
 Or download the zip from [Releases](https://github.com/destucr/Switchboard/releases). The app is not notarized yet, so right click it and choose Open the first time.
+
+## Command line
+
+The cask also installs a `switchboard` command:
+
+```sh
+switchboard status [--json]    # what is running
+switchboard export             # write switchboard.json from what you have run
+switchboard start              # start the stack in order
+switchboard stop               # stop it, front ends first
+```
+
+`switchboard.json` holds commands and dependencies only, never environment variables.
 
 ## Build
 

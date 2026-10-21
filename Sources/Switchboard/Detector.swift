@@ -37,11 +37,7 @@ enum Detector {
         }
         let root = gitRoot ?? nearest ?? cwd
         guard root != home else { return nil }
-        var name = (root as NSString).lastPathComponent
-        if let nearest, nearest != root, nearest.hasPrefix(root + "/") {
-            name += " › " + nearest.dropFirst(root.count + 1)
-        }
-        return ProjectInfo(name: name, path: root)
+        return ProjectInfo(name: (root as NSString).lastPathComponent, path: root)
     }
 
     // MARK: Flavor

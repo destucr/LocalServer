@@ -13,6 +13,8 @@ private struct SavedState: Codable {
 final class Store: ObservableObject {
     @Published private(set) var entries: [PortEntry] = []
     @Published private(set) var stopped: [KnownServer] = []
+    @Published private(set) var projects: [String] = []          // folders added by hand
+    @Published private(set) var declaredKeys: Set<String> = []   // servers that come from a switchboard.json
     @Published var query = ""
     @Published private(set) var stack = StackMap.empty
     @Published private(set) var mapOffsets: [String: CGSize] = [:]   // where you dragged map nodes
@@ -41,6 +43,8 @@ final class Store: ObservableObject {
     let tunnels = TunnelManager()
 
     private var known: [String: KnownServer] = [:]
+    private var declared: [String: KnownServer] = [:]
+    private var declaredStamps: [String: Date] = [:]
     private var dirty = false
     private var lastSave = Date()
     private let persistent: Bool
@@ -69,6 +73,7 @@ final class Store: ObservableObject {
         persistent = true
         let d = UserDefaults.standard
         showMap = d.bool(forKey: "showMap")
+        projects = d.stringArray(forKey: "projects") ?? []
         mapOffsets = (d.dictionary(forKey: "mapOffsets") as? [String: [Double]] ?? [:]).compactMapValues { $0.count == 2 ? CGSize(width: $0[0], height: $0[1]) : nil }
         showStopped = d.bool(forKey: "showStopped")
         notifyOnStop = d.object(forKey: "notifyOnStop") as? Bool ?? true
@@ -111,7 +116,7 @@ final class Store: ObservableObject {
         let runningGroups = Set(running.map { pinned.contains($0.key) ? "Pinned" : $0.group })
         let stoppedVisible = stopped.filter { k in
             matches(query, [k.title, k.group, String(k.port)]) &&
-            (showStopped || runningGroups.contains(pinned.contains(k.key) ? "Pinned" : k.group))
+            (showStopped || declaredKeys.contains(k.key) || runningGroups.contains(pinned.contains(k.key) ? "Pinned" : k.group))
         }
 
         var order: [String] = []
@@ -167,6 +172,35 @@ final class Store: ObservableObject {
         Task { try? await Task.sleep(for: .seconds(2)); withAnimation(Motion.anim) { recent.subtract(fresh) } }
     }
 
+    /// Stopped servers: what we remember plus what each project's switchboard.json declares. The file wins on how to start.
+    static func merge(known: [String: KnownServer], declared: [String: KnownServer], running: Set<String>) -> [KnownServer] {
+        var all = known
+        for (key, d) in declared {
+            if var k = all[key] {
+                k.title = d.title
+                k.start = d.start ?? k.start
+                k.containerID = d.containerID ?? k.containerID
+                k.uses = Array(Set(k.uses ?? []).union(d.uses ?? [])).sorted()
+                all[key] = k
+            } else { all[key] = d }
+        }
+        return all.values.filter { !running.contains($0.key) }
+    }
+
+    /// Reads each project's switchboard.json when it changes.
+    private func syncDeclared(roots: Set<String>) {
+        for root in roots {
+            let path = root + "/" + StackFile.fileName
+            let stamp = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+            if declaredStamps[root] == stamp { continue }
+            declaredStamps[root] = stamp
+            declared = declared.filter { $0.value.projectPath != root }
+            if stamp != nil, let file = StackFile.load(root: root) { for k in file.servers(root: root) { declared[k.key] = k } }
+        }
+        let keys = Set(declared.keys)
+        if keys != declaredKeys { declaredKeys = keys }
+    }
+
     /// Remember who was seen using whom, so the right start order is known later when everything is down.
     private func learn(_ map: StackMap) {
         for e in map.edges where !e.broken && (e.count > 0 || e.configured) {
@@ -187,7 +221,7 @@ final class Store: ObservableObject {
         for e in list where e.kind == .dev || e.kind == .docker {
             let k = KnownServer(key: e.key, port: e.port, title: e.title, group: e.group, projectPath: e.projectPath,
                                 start: e.restart.map { KnownStart(exec: $0.exec, argv: $0.argv, cwd: $0.cwd) },
-                                containerID: e.container?.id, lastSeen: now, uses: known[e.key]?.uses)
+                                containerID: e.container?.id, lastSeen: now, uses: known[e.key]?.uses, containerName: e.container?.name)
             var old = known[e.key]
             old?.lastSeen = now
             if old != k { dirty = true }
@@ -202,7 +236,8 @@ final class Store: ObservableObject {
         let cutoff = now.addingTimeInterval(-14 * 86400)
         for (k, v) in known where v.lastSeen < cutoff { known[k] = nil; dirty = true }
 
-        let s = known.values.filter { !runningKeys.contains($0.key) }
+        syncDeclared(roots: Set(projects).union(known.values.compactMap(\.projectPath)).union(list.compactMap(\.projectPath)))
+        let s = Self.merge(known: known, declared: declared, running: runningKeys)
             .sorted { ($0.group.lowercased(), $0.port) < ($1.group.lowercased(), $1.port) }
         if s != stopped { stopped = s }
     }
@@ -219,7 +254,7 @@ final class Store: ObservableObject {
             guard n >= 2 else { missing[k] = n; continue }
             watching[k] = nil; missing[k] = nil
 
-            let byUser = expectedStops[k].map { Date().timeIntervalSince($0) < 120 } ?? false
+            let byUser = (expectedStops[k].map { Date().timeIntervalSince($0) < 120 } ?? false) || ExpectedStops.contains(k)
             let takenOver = list.first { $0.port == w.entry.port && $0.pid != w.entry.pid && $0.kind != .other }
             let d = Diagnose.run(entry: w.entry, byUser: byUser, logPath: w.logPath, shellPid: w.shellPid, takenOverBy: takenOver)
             diagnoses[k] = d
@@ -290,6 +325,42 @@ final class Store: ObservableObject {
     func refreshBackdrop(screen: NSScreen?, dark: Bool) {
         let t = Backdrop.tint(screen: screen, dark: dark)
         if abs(t - backdropTint) > 0.005 { backdropTint = t }
+    }
+
+    // MARK: Shared stack file
+
+    func addProject() {
+        guard let picked = Dialogs.chooseFolder("Choose a project folder that has a switchboard.json") else { return }
+        let root = StackFile.find(from: picked) ?? picked
+        guard FileManager.default.fileExists(atPath: root + "/" + StackFile.fileName) else {
+            flash("No switchboard.json in \(abbreviateHome(picked)). Use Save stack file on a running project, or run `switchboard export` there.")
+            return
+        }
+        if !projects.contains(root) { projects.append(root); UserDefaults.standard.set(projects, forKey: "projects") }
+        Task { await refresh() }
+        flash("Added \((root as NSString).lastPathComponent). Press Start stack to bring it up.")
+    }
+
+    func removeProject(_ root: String) {
+        projects.removeAll { $0 == root }
+        UserDefaults.standard.set(projects, forKey: "projects")
+        Task { await refresh() }
+    }
+
+    /// Writes switchboard.json into the project folder from what has been seen running there.
+    func saveStackFile(_ g: ProjectGroup) {
+        guard let root = g.path else { return }
+        var servers = known
+        for (k, d) in declared where servers[k] == nil { servers[k] = d }
+        let file = StackFile.export(root: root, servers: Array(servers.values))
+        guard !file.services.isEmpty else { flash("Nothing to save yet. Start this project's servers once so Switchboard can see them."); return }
+        let path = root + "/" + StackFile.fileName
+        if FileManager.default.fileExists(atPath: path),
+           !Dialogs.confirm("Replace switchboard.json?", "\(abbreviateHome(path)) already exists. It will be rewritten from what Switchboard has seen.", ok: "Replace") { return }
+        do {
+            try file.write(to: root)
+            flash("Saved \(file.services.count) service\(file.services.count == 1 ? "" : "s") to switchboard.json. Commit it so your team gets the same stack.")
+        } catch { flash("Could not save: \(error.localizedDescription)") }
     }
 
     // MARK: Map layout
