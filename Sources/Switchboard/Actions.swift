@@ -84,7 +84,8 @@ enum Actions {
 
     // MARK: Start (a server that is not running)
 
-    static func start(_ k: KnownServer) async throws {
+    /// `port` starts it on another port when its usual one is taken.
+    static func start(_ k: KnownServer, port: Int? = nil) async throws {
         if let id = k.containerID {
             guard let bin = Docker.binary else { throw ActionError.message("docker not found") }
             let r = await Task.detached { runCapture(bin, ["start", id], timeout: 30) }.value
@@ -93,11 +94,17 @@ enum Actions {
         }
         guard let s = k.start else { throw ActionError.message("Switchboard doesn't know how this was started") }
         guard FileManager.default.fileExists(atPath: s.cwd) else { throw ActionError.message("The folder is gone: \(abbreviateHome(s.cwd))") }
-        let log = try openLog(k.group, k.port, label: "started")
-        let cmd = ([s.exec] + s.argv.dropFirst()).map(shellQuote).joined(separator: " ")
+        let log = try openLog(k.group, port ?? k.port, label: port == nil ? "started" : "started on :\(port!)")
+        var argv = s.argv, envPrefix = ""
+        if let port {
+            let r = PortRewrite.apply(argv: argv, env: [:], old: k.port, new: port, cwd: s.cwd)
+            argv = r.argv
+            if let v = r.env["PORT"] { envPrefix = "PORT=\(v) " }
+        }
+        let cmd = ([s.exec] + argv.dropFirst()).map(shellQuote).joined(separator: " ")
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        p.arguments = ["-lic", "cd \(shellQuote(s.cwd)) && exec \(cmd)"]   // login shell so nvm, pyenv, etc. are on PATH
+        p.arguments = ["-lic", "cd \(shellQuote(s.cwd)) && \(envPrefix)exec \(cmd)"]   // login shell so nvm, pyenv, etc. are on PATH
         p.standardInput = FileHandle.nullDevice
         p.standardOutput = log
         p.standardError = log

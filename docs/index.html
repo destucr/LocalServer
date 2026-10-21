@@ -80,12 +80,12 @@ footer a{color:var(--sub)}
 <div class="card"><h3>See how servers connect</h3><p>A map shows which server talks to which, and warns you before you stop something others depend on.</p></div>
 <div class="card"><h3>Start a whole project</h3><p>Stopped servers stay listed. One click starts the project again, in the order its servers depend on each other.</p></div>
 <div class="card"><h3>Share your stack</h3><p>Save a <code>switchboard.json</code> in the repo. A teammate adds the folder and presses Start stack.</p></div>
-<div class="card"><h3>Port checker</h3><p>Type <code>3000</code> to see whether it is free and who has it. Change a server's port and undo it if it goes wrong.</p></div>
+<div class="card"><h3>Port conflicts</h3><p>Type <code>3000</code> to see who has it. Start tells you when a port is taken and offers the next free one. Change a running server's port, and undo it if it goes wrong.</p></div>
 </div>
 
 <h2>Install</h2>
 <pre>brew install --cask destucr/tap/switchboard</pre>
-<p style="color:var(--sub)">Needs macOS 14 or later. The app is not notarized yet, so right click it and choose Open the first time. The cask also installs a <code>switchboard</code> command for status, start and stop from the terminal.</p>
+<p style="color:var(--sub)">Needs macOS 14 or later. The app is not notarized yet, so macOS blocks it the first time. Open System Settings, go to Privacy &amp; Security and click Open Anyway, or run <code>xattr -dr com.apple.quarantine /Applications/Switchboard.app</code> once. The cask also installs a <code>switchboard</code> command for status, start and stop from the terminal.</p>
 
 <h2 id="faq">Questions</h2>
 <details><summary>How do I see what is using port 3000 on a Mac?</summary><p>Type 3000 in Switchboard's filter box. It shows whether the port is free and, if not, which process and project holds it. In Terminal the equivalent is <code>lsof -i :3000</code>.</p></details>

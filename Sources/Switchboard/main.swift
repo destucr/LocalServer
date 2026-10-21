@@ -195,6 +195,67 @@ if CommandLine.arguments.contains("--drag-test") {
     exit(0)
 }
 
+// `Switchboard --selftest` checks the pure logic and touches no state, so the release script can run it. Exits 1 on any failure.
+if CommandLine.arguments.contains("--selftest") {
+    var passed = 0, failed = 0
+    func check(_ name: String, _ ok: Bool) { if ok { passed += 1 } else { failed += 1; print("FAIL", name) } }
+    func rw(_ argv: [String], old: Int = 3000, env: [String: String] = [:]) -> (String, [String: String]) {
+        let r = PortRewrite.apply(argv: argv, env: env, old: old, new: 4000); return (r.argv.joined(separator: " "), r.env)
+    }
+    check("flag value", rw(["node", "vite", "--port", "3000"]).0 == "node vite --port 4000")
+    check("flag equals", rw(["php", "artisan", "serve", "--port=3000"]).0 == "php artisan serve --port=4000")
+    check("short flag", rw(["node", "next", "dev", "-p", "3000"]).0 == "node next dev -p 4000")
+    check("host and port", rw(["php", "-S", "localhost:3000"]).0 == "php -S localhost:4000")
+    check("python positional", rw(["python3", "-m", "http.server", "3000"]).0 == "python3 -m http.server 4000")
+    check("vite without a port gets a strict one", rw(["node", "vite"]).0 == "node vite --port 4000 --strictPort")
+    check("next without a port", rw(["node", "next", "dev"]).0 == "node next dev -p 4000")
+    check("unknown command falls back to PORT", rw(["node", "server.js"]).1["PORT"] == "4000")
+    check("PORT in env is replaced", rw(["node", "server.js"], env: ["PORT": "3000"]).1["PORT"] == "4000")
+    check("numbers that are not ports are left alone", rw(["node", "server.js", "--workers", "3000"]).0 == "node server.js --workers 3000")
+
+    func server(_ key: String, _ port: Int, uses: [String] = []) -> KnownServer {
+        KnownServer(key: key, port: port, title: key, group: "g", projectPath: "/p", start: KnownStart(exec: "/bin/echo", argv: ["echo"], cwd: "/"), containerID: nil, lastSeen: Date(), uses: uses)
+    }
+    let db = server("db", 5432), api = server("api", 8000, uses: ["db"]), web = server("web", 3000, uses: ["api"])
+    let order = StartPlan.levels(startable: [web, api, db], pool: [web, api, db]).map { $0.map(\.key) }
+    check("start order follows dependencies", order == [["db"], ["api"], ["web"]])
+
+    print(failed == 0 ? "selftest passed (\(passed) checks)" : "selftest FAILED (\(failed) of \(passed + failed))")
+    exit(failed == 0 ? 0 : 1)
+}
+
+// Debug helper: `Switchboard --start-e2e` starts a stopped server on another port while its own port is held.
+if CommandLine.arguments.contains("--start-e2e") {
+    MainActor.assumeIsolated {
+        let dir = NSHomeDirectory() + "/Projects/_starttest"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try? "require('http').createServer((q,r)=>r.end('ok')).listen(process.env.PORT||8741)".write(toFile: dir + "/s.js", atomically: true, encoding: .utf8)
+        let node = ["/opt/homebrew/bin/node", "/usr/local/bin/node"].first { FileManager.default.isExecutableFile(atPath: $0) } ?? "/usr/bin/env"
+        let blocker = Process()
+        blocker.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        blocker.arguments = ["-m", "http.server", "8741", "--directory", dir]
+        blocker.standardOutput = FileHandle.nullDevice; blocker.standardError = FileHandle.nullDevice
+        try! blocker.run()
+        func spin(until cond: () -> Bool, timeout: Double = 15) -> Bool {
+            let end = Date().addingTimeInterval(timeout)
+            while Date() < end { if cond() { return true }; RunLoop.current.run(until: Date().addingTimeInterval(0.1)) }
+            return cond()
+        }
+        print("1. port 8741 held by someone else:", spin(until: { Probe.isListening(8741) }, timeout: 6), "| isFree:", Ports.isFree(8741))
+        let k = KnownServer(key: "\(dir):8741", port: 8741, title: "Node.js", group: "_starttest", projectPath: dir,
+                            start: KnownStart(exec: node == "/usr/bin/env" ? "/usr/bin/env" : node, argv: node == "/usr/bin/env" ? ["env", "node", "s.js"] : [node, "s.js"], cwd: dir), containerID: nil, lastSeen: Date())
+        Task { try? await Actions.start(k, port: 8742) }
+        print("2. same server started on :8742:", spin(until: { Probe.isListening(8742) }))
+        blocker.terminate()
+        _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/pkill"), arguments: ["-f", "_starttest"])
+        _ = try? Process.run(URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", "kill $(lsof -tiTCP:8742 -sTCP:LISTEN) 2>/dev/null"])
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        try? FileManager.default.removeItem(atPath: dir)
+        try? FileManager.default.removeItem(atPath: NSHomeDirectory() + "/Library/Logs/Switchboard/_starttest-8742.log")
+    }
+    exit(0)
+}
+
 // Debug helper: `Switchboard --port-e2e` moves a real server to another port and back, and checks the rewriter on common commands.
 if CommandLine.arguments.contains("--port-e2e") {
     MainActor.assumeIsolated {

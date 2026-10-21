@@ -502,7 +502,7 @@ final class Store: ObservableObject {
             expectedStops[e.key] = Date()
             let again = known[e.key].flatMap { $0.canStart ? $0 : nil }
             perform(e.key, label: "Stopping…", success: "Stopped \(displayName(e)) :\(e.port)",
-                    undo: again.map { k in UndoAction(label: "Undo") { [weak self] in self?.start(k) } }) { try await Actions.kill(e) }
+                    undo: again.map { k in UndoAction(label: "Undo") { self.start(k) } }) { try await Actions.kill(e) }
         }
     }
 
@@ -536,8 +536,7 @@ final class Store: ObservableObject {
             do { try await Actions.restart(e, port: port) } catch { flash(error.localizedDescription); return }
             for _ in 0..<60 where !Probe.isListening(port) { try? await Task.sleep(for: .milliseconds(250)) }
             await refresh()
-            let back = UndoAction(label: "Undo") { [weak self] in
-                guard let self else { return }
+            let back = UndoAction(label: "Undo") {
                 if let now = self.entries.first(where: { $0.key == newKey }) { self.changePort(now, to: e.port) }
                 else if let k = oldKnown { self.start(k) }
             }
@@ -555,9 +554,43 @@ final class Store: ObservableObject {
         }
     }
 
+    /// Who holds the port a stopped server wants, or nil if it is free.
+    private func holder(of k: KnownServer) -> String? {
+        guard !Ports.isFree(k.port) else { return nil }
+        if let e = entries.first(where: { $0.port == k.port }) { return "\(displayName(e))\(e.projectName.map { " (\($0))" } ?? "")" }
+        return "another process"
+    }
+
     func start(_ k: KnownServer) {
+        if let who = holder(of: k) {
+            guard k.containerID == nil, k.start != nil else {
+                flash("Port \(k.port) is in use by \(who), and this one can't move to another port. Stop \(who) first.")
+                return
+            }
+            let next = Ports.nextFree(after: k.port, taken: Set(entries.map(\.port)))
+            guard Dialogs.confirm("Port \(k.port) is in use", "\(who) is using it, so \(k.title) would fail to start. Start it on :\(next) instead?", ok: "Start on :\(next)") else { return }
+            startMoved(k, to: next)
+            return
+        }
         perform(k.key, label: "Starting…", success: "Starting \(k.title) on :\(k.port). It can take a few seconds to show up.", settle: 2.0) {
             try await Actions.start(k)
+        }
+    }
+
+    private func startMoved(_ k: KnownServer, to port: Int) {
+        let oldKey = k.key, newKey = String(k.key.dropLast(String(k.port).count)) + String(port)
+        busy[oldKey] = "Starting on :\(port)…"
+        Task {
+            defer { busy[oldKey] = nil }
+            do { try await Actions.start(k, port: port) } catch { flash(error.localizedDescription); return }
+            for _ in 0..<60 where !Probe.isListening(port) { try? await Task.sleep(for: .milliseconds(250)) }
+            await refresh()
+            guard Probe.isListening(port) else { flash("Nothing is listening on :\(port) yet. It may be slow to start, or ignore the port setting."); return }
+            if let n = names[oldKey] { names[newKey] = n; names[oldKey] = nil }
+            if pinned.contains(oldKey) { pinned.remove(oldKey); pinned.insert(newKey) }
+            known[oldKey] = nil; stopped.removeAll { $0.key == oldKey }
+            dirty = true; persist(force: true)
+            flash("Started \(k.title) on :\(port), because :\(k.port) was taken.")
         }
     }
 
@@ -646,7 +679,7 @@ final class Store: ObservableObject {
             for e in targets { busy[e.key] = nil }
             let back = targets.compactMap { known[$0.key] }.filter(\.canStart)
             flash(failed == 0 ? "Stopped everything in \(g.name)." : "\(failed) server\(failed == 1 ? "" : "s") could not be stopped.",
-                  undo: back.isEmpty ? nil : UndoAction(label: "Undo") { [weak self] in self?.startServers(back) })
+                  undo: back.isEmpty ? nil : UndoAction(label: "Undo") { self.startServers(back) })
         }
     }
 
@@ -667,7 +700,15 @@ final class Store: ObservableObject {
     /// Start everything that is stopped in this project, dependencies first, waiting for each tier to come up.
     func startAll(_ g: ProjectGroup) { startServers(g.stopped.filter(\.canStart)) }
 
-    func startServers(_ startable: [KnownServer]) {
+    func startServers(_ all: [KnownServer]) {
+        // Skip servers whose port someone else holds. Starting them would only fail after a minute of waiting.
+        let blocked = all.filter { holder(of: $0) != nil }
+        let startable = all.filter { k in !blocked.contains(where: { $0.key == k.key }) }
+        if !blocked.isEmpty {
+            let list = blocked.map { "\($0.title) :\($0.port), used by \(holder(of: $0) ?? "another process")" }.joined(separator: "\n")
+            if startable.isEmpty { flash("Nothing started. \(blocked.count == 1 ? "Its port is" : "Their ports are") taken. Stop what holds \(blocked.count == 1 ? "it" : "them"), or use Change port."); return }
+            guard Dialogs.confirm("\(blocked.count) port\(blocked.count == 1 ? " is" : "s are") taken", list + "\n\nStart the rest and skip \(blocked.count == 1 ? "this one" : "these")?", ok: "Start the rest") else { return }
+        }
         guard !startable.isEmpty else { return }
         let levels = StartPlan.levels(startable: startable, pool: stopped + startable)
         let plan = StartPlan.describe(levels)

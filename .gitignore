@@ -18,3 +18,4 @@ DerivedData/
 .idea/
 .claude/
 *.log
+build-notes.md
