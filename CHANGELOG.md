@@ -4,6 +4,8 @@ All notable changes to Switchboard. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-22
+
 ### Added
 - Logs open inside Switchboard instead of a new Terminal window. They follow new lines, can be filtered, copied and cleared, and work for Docker containers too.
 - A terminal button sends the log to Terminal, iTerm, Ghostty, Warp, kitty, Alacritty or WezTerm, whichever are installed. It remembers your pick, shows that terminal's icon and opens it in one click. "Terminal for logs" in the settings menu changes it.
