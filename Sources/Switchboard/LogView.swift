@@ -295,11 +295,15 @@ struct TerminalMenu: View {
                 arrow("Use another terminal")
             }
         } else {
-            HStack(spacing: 0) {
-                Image(systemName: "terminal").frame(width: 24, height: 24)
-                    .overlay { Color.clear.contentShape(Rectangle()) }
-                arrow("Choose a terminal to open this log in")
+            Menu { choices } label: {
+                HStack(spacing: 2) {
+                    Image(systemName: "terminal")
+                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)).foregroundStyle(.secondary)
+                }
+                .frame(height: 24).contentShape(Rectangle())
             }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .hoverTip("Choose a terminal to open this log in", tint: Brand.primary)
         }
     }
 }
