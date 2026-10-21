@@ -122,6 +122,11 @@ struct RowView: View {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
                     Text(entry.title).font(.system(size: 13)).lineLimit(1)
+                    if entry.web == .api {
+                        Text("API").font(.system(size: 9, weight: .bold)).padding(.horizontal, 4).padding(.vertical, 1)
+                            .background(.secondary.opacity(0.18), in: Capsule()).foregroundStyle(.secondary)
+                            .help("Answers HTTP but not with a web page")
+                    }
                     if entry.lanExposed {
                         Image(systemName: "wifi").font(.system(size: 9)).foregroundStyle(.orange)
                             .help("Reachable from your network (listening on all interfaces)")
@@ -136,13 +141,13 @@ struct RowView: View {
                 if hover { secondaryActions } else if let up = entry.uptime {
                     Text(up).font(.caption).foregroundStyle(.tertiary)
                 }
-                if entry.isWeb {
+                if entry.web == .page {
                     Button("Open") { store.open(entry) }
                         .controlSize(.small).buttonStyle(.bordered)
                 } else {
                     Button("Copy") { store.copyLocal(entry) }
                         .controlSize(.small).buttonStyle(.bordered)
-                        .help("Copy localhost:\(entry.port)")
+                        .help(entry.web == .none ? "Copy localhost:\(entry.port)" : "Copy http://localhost:\(entry.port)")
                 }
             }
         }
@@ -155,6 +160,9 @@ struct RowView: View {
 
     private var secondaryActions: some View {
         HStack(spacing: 0) {
+            if entry.web == .api {
+                IconButton(symbol: "arrow.up.forward.square", help: "Open in browser") { store.open(entry) }
+            }
             IconButton(symbol: "arrow.clockwise", help: "Restart") { store.restart(entry) }
                 .disabled(!canRestart)
             IconButton(symbol: "text.alignleft", help: "Show logs") { store.tail(entry) }
@@ -183,7 +191,7 @@ struct RowView: View {
             Image(systemName: "square.and.arrow.up").frame(width: 22, height: 22).contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-        .disabled(!entry.isWeb)
+        .disabled(entry.web == .none)
         .help("Share")
     }
 }

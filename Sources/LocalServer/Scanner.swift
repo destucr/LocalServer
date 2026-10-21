@@ -45,11 +45,25 @@ enum Scanner {
                     kind: .docker, title: image, pid: nil,
                     command: "docker \(d.container.name)",
                     projectName: d.project, projectPath: d.workdir, group: groupName,
-                    uptime: nil, container: d.container, isWeb: !isDB, restart: nil))
+                    uptime: nil, container: d.container, web: isDB ? .none : .page, restart: nil))
             }
         }
 
+        probeWebKinds(&entries)
         return entries.sorted { ($0.group.lowercased(), $0.port) < ($1.group.lowercased(), $1.port) }
+    }
+
+    /// Ask each candidate port what it serves, in parallel (≤ ~1s total).
+    private static func probeWebKinds(_ entries: inout [PortEntry]) {
+        let jobs = entries.indices.filter { entries[$0].web != .none }.map { ($0, entries[$0].pid, entries[$0].port, entries[$0].host) }
+        var results = [WebKind](repeating: .none, count: jobs.count)
+        let lock = NSLock()
+        DispatchQueue.concurrentPerform(iterations: jobs.count) { n in
+            let j = jobs[n]
+            let k = Probe.kind(pid: j.1, port: j.2, host: j.3)
+            lock.lock(); results[n] = k; lock.unlock()
+        }
+        for (n, j) in jobs.enumerated() { entries[j.0].web = results[n] }
     }
 
     // MARK: lsof
@@ -96,7 +110,7 @@ enum Scanner {
             id: "", port: 0, host: "", lanExposed: false, kind: flavor.kind, title: flavor.name,
             pid: pid, command: argv.map { abbreviateHome($0) }.joined(separator: " "),
             projectName: project?.name, projectPath: project?.path, group: group,
-            uptime: uptime, container: nil, isWeb: flavor.isWeb,
+            uptime: uptime, container: nil, web: flavor.isWeb ? .page : .none,
             restart: flavor.kind == .other ? nil : restartSpec(pid: pid, cwd: cwd, exec: exec, argv: argv, env: ae?.env))
     }
 

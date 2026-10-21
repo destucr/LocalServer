@@ -96,7 +96,11 @@ final class Store: ObservableObject {
         }
     }
 
-    func copyLocal(_ e: PortEntry) { Actions.copy(e.localURL.absoluteString); flash("Copied \(e.localURL.absoluteString)") }
+    func copyLocal(_ e: PortEntry) {
+        let text = e.web == .none ? "localhost:\(e.port)" : e.localURL.absoluteString
+        Actions.copy(text)
+        flash("Copied \(text)")
+    }
 
     func copyLAN(_ e: PortEntry) {
         guard let ip = Actions.lanAddress() else { flash("No LAN address found"); return }

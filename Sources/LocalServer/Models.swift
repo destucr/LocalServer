@@ -43,7 +43,7 @@ struct PortEntry: Identifiable, Hashable {
     var group: String
     var uptime: String?
     var container: DockerContainer?
-    var isWeb: Bool
+    var web: WebKind
     var restart: RestartSpec?
 
     var localURL: URL { URL(string: "\(port == 443 || port == 8443 ? "https" : "http")://localhost:\(port)")! }
