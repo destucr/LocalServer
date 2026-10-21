@@ -44,17 +44,19 @@ nav .links a{text-decoration:none}nav .links a:hover{color:var(--ink)}
 .btn.primary:hover{opacity:.88}
 .btn.ghost{background:transparent;border-color:var(--line);color:var(--ink);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:500;font-size:14px}
 .btn.ghost:hover{background:var(--card)}
+@media (max-width:520px){.btn.ghost{height:auto;padding:12px 16px;white-space:normal;word-break:break-all;text-align:left;font-size:13px}nav .links a.hide2{display:none}}
 nav .btn{height:36px;padding:0 16px;font-size:14px}
 .hero{padding:72px 0 40px;text-align:center}
-h1{font-size:clamp(42px,7.4vw,88px);line-height:1.02;letter-spacing:-.04em;font-weight:680;max-width:11.5em;margin:0 auto}
-h1 span{color:var(--faint)}
+h1{font-size:clamp(42px,7.4vw,88px);line-height:1.02;letter-spacing:-.04em;font-weight:680;max-width:12em;margin:0 auto}
+h1 span{color:var(--faint);display:block}
+h1,.statement p,h2{text-wrap:balance}
 .lead{font-size:clamp(18px,2.1vw,22px);color:var(--sub);max-width:34em;margin:26px auto 0;line-height:1.5}
 .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:34px}
 .fine{margin-top:18px;font-size:14px;color:var(--faint)}
 .stage{margin:44px auto 0;border-radius:28px;padding:clamp(20px,5vw,56px);background:radial-gradient(120% 120% at 0% 0%,#f4b3d6 0%,#c7c3f5 45%,#9fcdf0 100%);display:grid;grid-template-columns:1fr 1fr;gap:clamp(12px,3vw,32px);overflow:hidden;box-shadow:0 30px 80px -30px rgba(79,70,229,.35)}
 @media (prefers-color-scheme:dark){.stage{background:radial-gradient(120% 120% at 0% 0%,#4b2a63 0%,#2b2a63 45%,#1e3f63 100%)}}
-.stage figure{margin:0;border-radius:16px;overflow:hidden;line-height:0;box-shadow:0 18px 50px rgba(20,10,60,.35)}
-.stage img{width:100%;height:auto;display:block}
+.stage figure{margin:0;border-radius:2.6%;overflow:hidden;line-height:0;box-shadow:0 18px 50px rgba(20,10,60,.35);aspect-ratio:940/1020;position:relative}
+.stage img{width:123.8%;max-width:none;height:auto;display:block;margin:-11.9% 0 0 -11.9%}
 .stage .dark{display:none}
 @media (prefers-color-scheme:dark){.stage .light{display:none}.stage .dark{display:block}}
 .stage figure:nth-child(2){transform:translateY(28px)}
@@ -117,7 +119,7 @@ footer a{text-decoration:none;margin-right:20px}footer a:hover{color:var(--ink)}
 <div class="wrap">
 <nav>
 <a class="logo" href="#"><i></i>Switchboard</a>
-<div class="links"><a class="hide" href="#features">Features</a><a class="hide" href="#faq">FAQ</a><a class="hide" href="https://github.com/destucr/Switchboard/blob/main/CHANGELOG.md">Changelog</a><a href="https://github.com/destucr/Switchboard">GitHub</a><a class="btn primary" href="https://github.com/destucr/Switchboard/releases/latest">Download</a></div>
+<div class="links"><a class="hide" href="#features">Features</a><a class="hide" href="#faq">FAQ</a><a class="hide" href="https://github.com/destucr/Switchboard/blob/main/CHANGELOG.md">Changelog</a><a class="hide2" href="https://github.com/destucr/Switchboard">GitHub</a><a class="btn primary" href="https://github.com/destucr/Switchboard/releases/latest">Download</a></div>
 </nav>
 
 <header class="hero">
