@@ -25,6 +25,8 @@ struct StackMapView: View {
     @EnvironmentObject var store: Store
     @State private var selected: String?
     @State private var dragging: [String: CGSize] = [:]
+    @State private var panLive: CGSize?
+    @State private var zoomLive: CGFloat?
 
     private let stripHeight: CGFloat = 78
     private let tile: CGFloat = 40
@@ -47,14 +49,25 @@ struct StackMapView: View {
                     out[kv.key] = CGPoint(x: min(max(kv.value.x + off.width, 40), geo.size.width - 40),
                                           y: min(max(kv.value.y + off.height, 34), geo.size.height - 54))
                 }
+                let pan = panLive ?? store.mapPan
+                let zoom = zoomLive ?? store.mapZoom
+
                 ZStack(alignment: .topLeading) {
                     Canvas { ctx, _ in
                         for e in map.edges { draw(edge: e, in: &ctx, points: points, map: map) }
                     }
+                    ForEach(map.edges.filter { $0.count > 1 }, id: \.self) { e in
+                        if let a = points[e.from], let b = points[e.to] {
+                            Text("×\(e.count)").font(.system(size: 9, weight: .semibold)).foregroundStyle(Brand.primaryText)
+                                .padding(.horizontal, 4).padding(.vertical, 1)
+                                .background(Capsule().fill(.regularMaterial))
+                                .position(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+                                .allowsHitTesting(false)
+                        }
+                    }
                     ForEach(map.nodes) { n in
                         if let p = points[n.id] {
                             NodeView(node: n, map: map, selected: selected == n.id, dimmed: dimmed(n, map), width: layout.nodeW, tile: tile)
-                                .position(x: p.x, y: p.y + 17)
                                 .onTapGesture { selected = selected == n.id ? nil : n.id }
                                 .gesture(
                                     DragGesture(minimumDistance: 4, coordinateSpace: .named("map"))
@@ -67,20 +80,34 @@ struct StackMapView: View {
                                             dragging[n.id] = nil
                                         }
                                 )
+                                .onHover { inside in if inside { NSCursor.openHand.push() } else { NSCursor.pop() } }
+                                .position(x: p.x, y: p.y + 17)
                         }
                     }
                     if !layout.isolated.isEmpty {
                         Text("Not connected").font(.caption).foregroundStyle(.secondary).position(x: 56, y: geo.size.height - stripHeight - 4)
                     }
                 }
+                .frame(width: geo.size.width, height: geo.size.height)
                 .coordinateSpace(name: "map")
-                .overlay(alignment: .topTrailing) {
-                    if !store.mapOffsets.isEmpty {
-                        Button("Reset layout") { withAnimation(Motion.anim) { store.resetMapLayout() } }
-                            .buttonStyle(PillButton(tone: .quiet, width: 92)).padding(8)
-                            .hoverTip("Put nodes back", tint: Brand.primary)
-                    }
-                }
+                .scaleEffect(zoom)
+                .offset(pan)
+                // The whole area: drag empty space to pan, pinch to zoom, click it to deselect.
+                .frame(width: geo.size.width, height: geo.size.height)
+                .contentShape(Rectangle())
+                .onTapGesture { selected = nil }
+                .gesture(
+                    DragGesture(minimumDistance: 4)
+                        .onChanged { v in panLive = CGSize(width: store.mapPan.width + v.translation.width, height: store.mapPan.height + v.translation.height) }
+                        .onEnded { _ in if let p = panLive { store.setMapView(pan: p, zoom: store.mapZoom) }; panLive = nil }
+                )
+                .simultaneousGesture(
+                    MagnifyGesture()
+                        .onChanged { zoomLive = store.mapZoom * $0.magnification }
+                        .onEnded { _ in if let z = zoomLive { store.setMapView(pan: store.mapPan, zoom: z) }; zoomLive = nil }
+                )
+                .clipped()
+                .overlay(alignment: .topTrailing) { MapControls() }
                 .overlay(alignment: .bottom) { if let id = selected, let n = map.node(id) { DetailCard(node: n, map: map, close: { selected = nil }) } }
                 .overlay(alignment: .bottomLeading) { if selected == nil { Legend().padding(.horizontal, 12).padding(.bottom, 2) } }
             }
@@ -283,6 +310,7 @@ private struct Legend: View {
             item(Brand.primaryText, dash: false, "connected now")
             item(Color.secondary, dash: true, "set in .env")
             item(Brand.alert, dash: false, "problem")
+            Text("·  drag to move, pinch to zoom").foregroundStyle(.secondary)
         }
         .font(.system(size: 10)).foregroundStyle(.secondary)
     }
@@ -294,5 +322,22 @@ private struct Legend: View {
                 .frame(width: 16, height: 6)
             Text(text)
         }
+    }
+}
+
+/// Zoom in, zoom out and reset, for people without a trackpad.
+private struct MapControls: View {
+    @EnvironmentObject var store: Store
+
+    var body: some View {
+        HStack(spacing: 2) {
+            if store.mapIsCustomised {
+                Button("Reset") { withAnimation(Motion.anim) { store.resetMapLayout() } }
+                    .buttonStyle(PillButton(tone: .quiet, width: 52)).hoverTip("Back to the automatic layout", tint: Brand.primary)
+            }
+            IconButton(symbol: "minus", help: "Zoom out") { withAnimation(Motion.anim) { store.setMapView(pan: store.mapPan, zoom: store.mapZoom - 0.2) } }
+            IconButton(symbol: "plus", help: "Zoom in") { withAnimation(Motion.anim) { store.setMapView(pan: store.mapPan, zoom: store.mapZoom + 0.2) } }
+        }
+        .padding(8)
     }
 }

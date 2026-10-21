@@ -18,6 +18,8 @@ final class Store: ObservableObject {
     @Published var query = ""
     @Published private(set) var stack = StackMap.empty
     @Published private(set) var mapOffsets: [String: CGSize] = [:]   // where you dragged map nodes
+    @Published private(set) var mapPan: CGSize = .zero
+    @Published private(set) var mapZoom: CGFloat = 1
     @Published var showMap: Bool { didSet { UserDefaults.standard.set(showMap, forKey: "showMap"); if showMap { Task { await refresh() } } } }
     @Published var showAll = false
     @Published var message: String?
@@ -74,6 +76,7 @@ final class Store: ObservableObject {
         let d = UserDefaults.standard
         showMap = d.bool(forKey: "showMap")
         projects = d.stringArray(forKey: "projects") ?? []
+        if let v = d.array(forKey: "mapView") as? [Double], v.count == 3 { mapPan = CGSize(width: v[0], height: v[1]); mapZoom = CGFloat(v[2]) }
         mapOffsets = (d.dictionary(forKey: "mapOffsets") as? [String: [Double]] ?? [:]).compactMapValues { $0.count == 2 ? CGSize(width: $0[0], height: $0[1]) : nil }
         showStopped = d.bool(forKey: "showStopped")
         notifyOnStop = d.object(forKey: "notifyOnStop") as? Bool ?? true
@@ -370,9 +373,18 @@ final class Store: ObservableObject {
         UserDefaults.standard.set(mapOffsets.mapValues { [Double($0.width), Double($0.height)] }, forKey: "mapOffsets")
     }
 
+    func setMapView(pan: CGSize, zoom: CGFloat) {
+        mapPan = CGSize(width: min(max(pan.width, -260), 260), height: min(max(pan.height, -260), 260))
+        mapZoom = min(max(zoom, 0.5), 2.2)
+        UserDefaults.standard.set([Double(mapPan.width), Double(mapPan.height), Double(mapZoom)], forKey: "mapView")
+    }
+
+    var mapIsCustomised: Bool { !mapOffsets.isEmpty || mapPan != .zero || abs(mapZoom - 1) > 0.01 }
+
     func resetMapLayout() {
-        mapOffsets = [:]
+        mapOffsets = [:]; mapPan = .zero; mapZoom = 1
         UserDefaults.standard.removeObject(forKey: "mapOffsets")
+        UserDefaults.standard.removeObject(forKey: "mapView")
     }
 
     // MARK: Hover and shortcuts

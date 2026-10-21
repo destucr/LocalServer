@@ -136,6 +136,65 @@ if let i = CommandLine.arguments.firstIndex(of: "--declared-test"), CommandLine.
     exit(0)
 }
 
+// Debug helper: `Switchboard --drag-test` sends a real mouse press, drag and release into the map and reports whether the node moved.
+if CommandLine.arguments.contains("--drag-test") {
+    MainActor.assumeIsolated {
+        _ = NSApplication.shared
+        func node(_ port: Int, _ title: String, _ type: StackType) -> StackNode {
+            StackNode(id: "/p/a:\(port)", role: .server, port: port, title: title, project: "a", status: 200, entryID: nil, type: type)
+        }
+        let nodes = [node(3000, "Next.js", .web), node(8000, "Laravel", .api), node(5432, "PostgreSQL", .database)]
+        let edges = [StackEdge(from: "/p/a:3000", to: "/p/a:8000", count: 2, hint: nil, configured: false, broken: false),
+                     StackEdge(from: "/p/a:8000", to: "/p/a:5432", count: 1, hint: nil, configured: false, broken: false)]
+        let map = StackMap(nodes: nodes, edges: edges)
+        let store = Store(sample: [], stack: map, showMap: true)
+
+        let size = CGSize(width: 470, height: 440)
+        let host = NSHostingView(rootView: StackMapView().environmentObject(store).frame(width: size.width, height: size.height))
+        let win = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        win.contentView = host
+        win.setFrameOrigin(NSPoint(x: 200, y: 200))
+        win.orderFront(nil)
+        win.makeKey()
+        func spin(_ t: Double = 0.08) { RunLoop.current.run(until: Date().addingTimeInterval(t)) }
+        spin(0.8)
+
+        let layout = StackMapView.Layout(map: map, size: CGSize(width: size.width, height: size.height - 16), stripHeight: 78)
+        let key = "/p/a:8000"
+        let p = layout.point[key]!
+        let startView = CGPoint(x: p.x, y: p.y + 17 + 8)            // node centre: layout point + label offset + the map's 8pt padding
+        let start = NSPoint(x: startView.x, y: size.height - startView.y)   // AppKit window coordinates start at the bottom
+        func send(_ type: NSEvent.EventType, _ pt: NSPoint) {
+            let e = NSEvent.mouseEvent(with: type, location: pt, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                       windowNumber: win.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1)!
+            win.sendEvent(e); spin(0.03)
+        }
+        print("node \(key) is at view (\(Int(startView.x)), \(Int(startView.y)))")
+        send(.leftMouseDown, start)
+        var last = start
+        for i in 1...12 { last = NSPoint(x: start.x + CGFloat(i) * 5, y: start.y - CGFloat(i) * 4); send(.leftMouseDragged, last) }
+        send(.leftMouseUp, last)
+        spin(0.2)
+        print("dragged by (+60, +48) -> saved offset:", store.mapOffsets[key].map { "(\(Int($0.width)), \(Int($0.height)))" } ?? "NONE: the drag did nothing")
+
+        // a plain click elsewhere must not move anything
+        let other = NSPoint(x: 400, y: 60)
+        send(.leftMouseDown, other); send(.leftMouseUp, other); spin(0.1)
+        print("offsets after a plain click:", store.mapOffsets.count, "(should still be 1) pan:", store.mapPan)
+
+        // dragging empty space pans the whole map; the node offsets stay as they were
+        let empty = NSPoint(x: 420, y: 330)
+        send(.leftMouseDown, empty)
+        var e2 = empty
+        for i in 1...10 { e2 = NSPoint(x: empty.x - CGFloat(i) * 4, y: empty.y + CGFloat(i) * 3); send(.leftMouseDragged, e2) }
+        send(.leftMouseUp, e2); spin(0.2)
+        print("dragged empty space by (-40, -30) in view terms -> pan:", "(\(Int(store.mapPan.width)), \(Int(store.mapPan.height)))", "node offsets still:", store.mapOffsets.count)
+        store.setMapView(pan: store.mapPan, zoom: 1.4); print("zoom set:", store.mapZoom, "customised:", store.mapIsCustomised)
+        store.resetMapLayout(); print("after reset: customised =", store.mapIsCustomised, "offsets =", store.mapOffsets.count)
+    }
+    exit(0)
+}
+
 // Debug helper: `Switchboard --stack` prints who talks to whom.
 if CommandLine.arguments.contains("--stack") {
     let m = Scanner.stack(entries: Scanner.scan())
