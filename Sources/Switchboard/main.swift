@@ -269,6 +269,15 @@ if CommandLine.arguments.contains("--selftest") {
         t.stop()
     }
 
+    // Update check: numeric version order, and only real releases count.
+    check("1.10.0 is newer than 1.9.0", Updates.isNewer("1.10.0", than: "1.9.0"))
+    check("the same version is not newer", !Updates.isNewer("v1.7.0", than: "1.7.0"))
+    check("an older version is not newer", !Updates.isNewer("1.6.9", than: "1.7.0"))
+    check("garbage is never newer", !Updates.isNewer("nightly", than: "1.7.0") && !Updates.isNewer("1.7.0", than: "dev"))
+    check("a release is read from GitHub's reply", Updates.parse(Data(#"{"tag_name":"v1.8.0","html_url":"https://github.com/x/y/releases/tag/v1.8.0","body":"hi"}"#.utf8))?.version == "1.8.0")
+    check("a prerelease is ignored", Updates.parse(Data(#"{"tag_name":"v2.0.0","prerelease":true,"html_url":"https://x.y"}"#.utf8)) == nil)
+    check("a broken reply is ignored", Updates.parse(Data("<html>".utf8)) == nil)
+
     print(failed == 0 ? "selftest passed (\(passed) checks)" : "selftest FAILED (\(failed) of \(passed + failed))")
     exit(failed == 0 ? 0 : 1)
 }

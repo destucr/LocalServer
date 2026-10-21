@@ -4,6 +4,12 @@ All notable changes to Switchboard. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Added
+- Switchboard checks GitHub once a day for a newer release. When there is one, the settings menu shows "Update to X" with a dot on the gear. For Homebrew installs it updates and restarts itself, and for a zip install it opens the download page. "Check for updates" in the settings menu turns the daily check off, and "Check for updates now" asks right away.
+
+### Fixed
+- Buttons grow to fit their label, so "Copy address" is no longer cut off.
+
 ## [1.7.0] - 2026-10-22
 
 ### Added

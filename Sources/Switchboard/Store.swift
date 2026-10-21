@@ -27,6 +27,11 @@ final class Store: ObservableObject {
     @Published private(set) var mapPan: CGSize = .zero
     @Published private(set) var mapZoom: CGFloat = 1
     @Published var logs: LogTail?
+    @Published private(set) var update: ReleaseInfo?   // set only when a newer release exists
+    @Published private(set) var updating = false
+    @Published var checkForUpdates: Bool {
+        didSet { UserDefaults.standard.set(checkForUpdates, forKey: "checkForUpdates"); if checkForUpdates { checkUpdate(force: false) } else { update = nil } }
+    }
     @Published var showMap: Bool { didSet { UserDefaults.standard.set(showMap, forKey: "showMap"); if showMap { Task { await refresh() } } } }
     @Published var showAll = false
     @Published var message: String?
@@ -71,6 +76,7 @@ final class Store: ObservableObject {
         persistent = false
         showStopped = true
         notifyOnStop = false
+        checkForUpdates = false
         entries = sample
         self.stack = stack
         self.showMap = showMap
@@ -88,7 +94,9 @@ final class Store: ObservableObject {
         mapOffsets = (d.dictionary(forKey: "mapOffsets") as? [String: [Double]] ?? [:]).compactMapValues { $0.count == 2 ? CGSize(width: $0[0], height: $0[1]) : nil }
         showStopped = d.bool(forKey: "showStopped")
         notifyOnStop = d.object(forKey: "notifyOnStop") as? Bool ?? true
+        checkForUpdates = d.object(forKey: "checkForUpdates") as? Bool ?? true
         load()
+        Task { try? await Task.sleep(for: .seconds(6)); self.checkUpdate(force: false) }
         if notifyOnStop { Notifier.requestPermission() }
 
         Task { [weak self] in
@@ -606,6 +614,45 @@ final class Store: ObservableObject {
     }
 
     func forget(_ k: KnownServer) { known[k.key] = nil; stopped.removeAll { $0.key == k.key }; dirty = true; persist(force: true) }
+
+    // MARK: Updates
+
+    /// Quietly, at most once a day. `force` is for the menu item: it always asks and always answers.
+    func checkUpdate(force: Bool) {
+        let d = UserDefaults.standard
+        if !force {
+            guard checkForUpdates, Updates.current != "dev" else { return }
+            if let last = d.object(forKey: "lastUpdateCheck") as? Date, Date().timeIntervalSince(last) < 86_400 { return }
+        }
+        Task {
+            switch await Updates.latest() {
+            case .success(let r):
+                d.set(Date(), forKey: "lastUpdateCheck")
+                let newer = Updates.isNewer(r.version, than: Updates.current)
+                if checkForUpdates || force { update = newer ? r : nil }
+                if force { flash(newer ? "Version \(r.version) is available." : "You have the latest version, \(Updates.current).") }
+            case .failure(let why):
+                if force { flash(why.text) }   // a background check that fails stays silent and tries again later
+            }
+        }
+    }
+
+    func installUpdate() {
+        guard let r = update, !updating else { return }
+        let notes = r.notes.split(separator: "\n").prefix(8).joined(separator: "\n")
+        guard let brew = Updates.brew else {
+            if Dialogs.confirm("Version \(r.version) is available", "You installed Switchboard from a zip, so download the new one from GitHub and replace the old app.\n\n\(notes)", ok: "Open the download page") { NSWorkspace.shared.open(r.page) }
+            return
+        }
+        guard Dialogs.confirm("Update to \(r.version)?", "Switchboard updates with Homebrew, then restarts. Your servers keep running.\n\n\(notes)", ok: "Update") else { return }
+        updating = true
+        flash("Updating to \(r.version). This can take a minute.")
+        Task {
+            let problem = await Updates.upgrade(using: brew, to: r.version)
+            updating = false
+            if let problem { flash(problem) } else { Updates.relaunch() }
+        }
+    }
 
     /// Logs open inside the popover. Terminal is still there for people who want it.
     func tail(_ e: PortEntry) {

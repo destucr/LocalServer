@@ -46,7 +46,9 @@ struct PillButton: ButtonStyle {
         configuration.label
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(tone.text)
-            .frame(width: width, height: 22)
+            .lineLimit(1).fixedSize(horizontal: true, vertical: false)   // the label sets the width, so long ones like "Copy address" are never cut
+            .padding(.horizontal, 8)
+            .frame(minWidth: width, minHeight: 22)
             .background(tone.fill.opacity(configuration.isPressed ? 0.75 : 1), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .opacity(enabled ? 1 : 0.45)
             .scaleEffect(configuration.isPressed ? 0.95 : 1)
@@ -192,6 +194,10 @@ struct RootView: View {
                 }
                 Spacer()
                 Menu {
+                    if let u = store.update {
+                        Button(store.updating ? "Updating…" : "Update to \(u.version)…") { store.installUpdate() }.disabled(store.updating)
+                        Divider()
+                    }
                     Button("About Switchboard \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")") {
                         NSApp.activate(ignoringOtherApps: true)
                         NSApp.orderFrontStandardAboutPanel(nil)
@@ -205,10 +211,15 @@ struct RootView: View {
                     Picker("Terminal for logs", selection: Binding(get: { store.logTerminal }, set: { store.setLogTerminal($0) })) {
                         ForEach(TerminalApp.installed) { Text($0.name).tag($0) }
                     }
+                    Toggle("Check for updates", isOn: $store.checkForUpdates)
+                    Button("Check for updates now") { store.checkUpdate(force: true) }
                     Toggle("Launch at login", isOn: Binding(get: { store.launchAtLogin }, set: { store.launchAtLogin = $0 }))
                     Divider()
                     Button("Quit Switchboard") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")
-                } label: { Image(systemName: "gearshape") }
+                } label: {
+                    Image(systemName: "gearshape")
+                        .overlay(alignment: .topTrailing) { if store.update != nil { Circle().fill(Brand.primary).frame(width: 7, height: 7).offset(x: 3, y: -2) } }
+                }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             }
             .padding(.horizontal, 12).padding(.vertical, 7)
