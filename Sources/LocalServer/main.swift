@@ -1,3 +1,4 @@
+import SwiftUI
 import Foundation
 if CommandLine.arguments.contains("--scan") {
     for e in Scanner.scan() {
@@ -18,6 +19,41 @@ if let i = CommandLine.arguments.firstIndex(of: "--act"), CommandLine.arguments.
     }
     sem.wait()
     if let log = Actions.logFile(for: e) { print("log:", log) }
+    exit(0)
+}
+// Debug helper: `LocalServer --screenshot out.png` renders the popover with sample data.
+if let i = CommandLine.arguments.firstIndex(of: "--screenshot"), CommandLine.arguments.count > i + 1 {
+    let out = CommandLine.arguments[i + 1]
+    MainActor.assumeIsolated {
+        func e(_ port: Int, _ title: String, _ group: String, _ kind: EntryKind = .dev, up: String, web: Bool = true, lan: Bool = false) -> PortEntry {
+            PortEntry(id: "\(port)", port: port, host: "127.0.0.1", lanExposed: lan, kind: kind, title: title, pid: 1,
+                      command: "", projectName: group, projectPath: "/Users/dev/\(group)", group: group, uptime: up,
+                      container: nil, isWeb: web, restart: nil)
+        }
+        let store = Store(sample: [
+            e(5173, "Vite", "storefront", up: "2h 14m"), e(3000, "Next.js", "dashboard", up: "41m"),
+            e(3001, "Node.js", "dashboard", up: "41m", lan: true),
+            e(8000, "Laravel", "billing-api", up: "5h 3m"), e(5432, "PostgreSQL", "billing-api", .database, up: "3d 2h", web: false),
+            e(6379, "Redis", "billing-api", .database, up: "3d 2h", web: false),
+            e(8025, "mailpit", "Docker", .docker, up: "1d 4h"),
+        ])
+        _ = NSApplication.shared
+        let host = NSHostingView(rootView: RootView().environmentObject(store))
+        let size = host.fittingSize
+        let win = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        win.appearance = NSAppearance(named: .aqua)
+        host.appearance = NSAppearance(named: .aqua)
+        win.contentView = host
+        win.backgroundColor = .windowBackgroundColor
+        win.setFrameOrigin(NSPoint(x: -4000, y: -4000))
+        win.orderFront(nil)
+        RunLoop.current.run(until: Date().addingTimeInterval(1.0))
+        if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+            host.cacheDisplay(in: host.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: out))
+            print("wrote \(out) \(size)")
+        }
+    }
     exit(0)
 }
 LocalServerApp.main()

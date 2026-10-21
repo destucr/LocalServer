@@ -15,6 +15,9 @@ final class Store: ObservableObject {
 
     private var messageTask: Task<Void, Never>?
 
+    /// Fixed sample data, no polling — used for README screenshots.
+    init(sample: [PortEntry]) { entries = sample }
+
     init() {
         Task { [weak self] in
             while !Task.isCancelled {

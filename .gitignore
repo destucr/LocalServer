@@ -1,4 +1,20 @@
+# SwiftPM / build output
 .build/
 build/
+.swiftpm/
+Package.resolved
+
+# Xcode
+*.xcodeproj/xcuserdata/
+xcuserdata/
+DerivedData/
+
+# macOS
 .DS_Store
-*.xcodeproj
+*.dSYM
+
+# Editors / local
+.vscode/
+.idea/
+.claude/
+*.log
