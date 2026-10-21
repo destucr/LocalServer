@@ -211,7 +211,7 @@ struct LogView: View {
             }
             IconButton(symbol: "doc.on.doc", help: "Copy what you see") { Actions.copy(tail.text); store.flash("Copied the logs") }
             IconButton(symbol: "trash", help: "Clear the view. The file is not touched.") { tail.clear() }
-            IconButton(symbol: "terminal", help: "Open in Terminal") { store.openLogsInTerminal() }
+            TerminalMenu { store.openLogsInTerminal($0) }
         }
         .padding(.horizontal, 8).padding(.vertical, 9)
     }
@@ -257,5 +257,26 @@ struct LogView: View {
         case .warn: return Brand.orange
         case .marker: return .secondary
         }
+    }
+}
+
+/// Pick which terminal app takes the log. The last pick is remembered and ticked.
+struct TerminalMenu: View {
+    @EnvironmentObject var store: Store
+    var title = "Open in a terminal"
+    let open: (TerminalApp) -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(TerminalApp.installed) { app in
+                Button { open(app) } label: {
+                    if app == store.logTerminal { Label(app.name, systemImage: "checkmark") } else { Text(app.name) }
+                }
+            }
+        } label: {
+            Image(systemName: "terminal").frame(width: 24, height: 24).contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+        .hoverTip(title, tint: Brand.primary)
     }
 }

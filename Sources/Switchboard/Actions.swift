@@ -125,11 +125,11 @@ enum Actions {
         return .file(path)
     }
 
-    static func tail(_ e: PortEntry) throws {
+    static func tail(_ e: PortEntry, in terminal: TerminalApp = .fallback) throws {
         let title = "\(e.title) :\(e.port)"
         switch try logSource(e) {
-        case .docker(let bin, let id): openTerminal(title: title, command: "\(shellQuote(bin)) logs -f --tail 200 \(shellQuote(id))")
-        case .file(let path): openTerminal(title: title, command: "tail -n 200 -F \(shellQuote(path))")
+        case .docker(let bin, let id): try openTerminal(title: title, command: "\(shellQuote(bin)) logs -f --tail 200 \(shellQuote(id))", in: terminal)
+        case .file(let path): try openTerminal(title: title, command: "tail -n 200 -F \(shellQuote(path))", in: terminal)
         }
     }
 
@@ -157,12 +157,12 @@ enum Actions {
         return best?.0
     }
 
-    private static func openTerminal(title: String, command: String) {
+    private static func openTerminal(title: String, command: String, in terminal: TerminalApp) throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("switchboard-\(UUID().uuidString.prefix(8)).command")
         let script = "#!/bin/zsh\nprintf '\\033]0;%s\\007' \(shellQuote(title))\nexec \(command)\n"
         try? script.write(to: url, atomically: true, encoding: .utf8)
         try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
-        NSWorkspace.shared.open(url)
+        guard terminal.run(script: url) else { throw ActionError.message("Could not open \(terminal.name). Pick another terminal.") }
     }
 
     // MARK: Share

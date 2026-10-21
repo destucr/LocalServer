@@ -639,6 +639,7 @@ struct ServerMenu: View {
         Divider()
         Button("Restart") { store.restart(entry) }.disabled(entry.container == nil && entry.restart == nil)
         Button("Show logs") { store.tail(entry) }
+        Menu("Show logs in") { ForEach(TerminalApp.installed) { app in Button(app.name) { store.tailInTerminal(entry, app) } } }
         Button("Stop") { store.kill(entry) }
         Divider()
         Button(store.isPinned(entry.key) ? "Unpin" : "Pin to top") { store.togglePin(entry) }

@@ -623,9 +623,21 @@ final class Store: ObservableObject {
         withAnimation(Motion.anim) { logs = nil }
     }
 
-    func openLogsInTerminal() {
-        guard let e = entries.first(where: { $0.key == logs?.key }) else { flash("This server has stopped."); return }
-        do { try Actions.tail(e) } catch { flash(error.localizedDescription) }
+    /// The terminal last used for logs, if it is still installed.
+    var logTerminal: TerminalApp {
+        let id = UserDefaults.standard.string(forKey: "logTerminal")
+        return TerminalApp.installed.first { $0.id == id } ?? TerminalApp.installed.first ?? .fallback
+    }
+
+    /// Hands a server's log to a terminal app and remembers the choice.
+    func tailInTerminal(_ e: PortEntry, _ app: TerminalApp) {
+        do { try Actions.tail(e, in: app); UserDefaults.standard.set(app.id, forKey: "logTerminal"); objectWillChange.send() }
+        catch { flash(error.localizedDescription) }
+    }
+
+    func openLogsInTerminal(_ app: TerminalApp) {
+        guard let e = entries.first(where: { $0.key == logs?.key }) else { flash("This server has stopped, so there is nothing to follow."); return }
+        tailInTerminal(e, app)
     }
 
     /// Esc in the log screen: clear the filter first, then go back. Returns true if it did something.
