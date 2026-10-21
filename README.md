@@ -12,11 +12,9 @@ A Mac menu bar app that shows every port you have open, with the project it belo
 ## Features
 
 - **Grouped by project.** Vite, Next.js, Laravel, Django, Docker, Postgres, Redis and more.
-- **One clear button per row.** **Open** for web pages, **Copy URL** for APIs and databases.
-- **Hover a row** to restart, read logs, share (link or QR code for your phone), stop, pin or rename.
-- **Stopped servers stay listed** with a **Start** button. Whole project actions are in the project menu.
-- **Port checker.** Type `3000` to see if it is free, who has it, and the next free port.
-- **Alerts** when a server stops by itself. Shortcut: `Control + Option + P`.
+- **The right button for each server.** Open for web pages, Copy URL for APIs and databases.
+- **Servers you stopped stay listed** with a Start button.
+- **Port checker.** Type `3000` to see if it is free and who has it.
 
 ## Install
 

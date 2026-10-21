@@ -5,11 +5,14 @@ enum Brand {
     private static func adaptive(_ light: NSColor, _ dark: NSColor) -> Color {
         Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light })
     }
-    static let primary = adaptive(NSColor(red: 0.31, green: 0.27, blue: 0.90, alpha: 1), NSColor(red: 0.42, green: 0.44, blue: 0.96, alpha: 1))
-    static let primaryText = adaptive(NSColor(red: 0.26, green: 0.22, blue: 0.80, alpha: 1), NSColor(red: 0.65, green: 0.67, blue: 0.99, alpha: 1))
-    static let mint = Color(red: 0.30, green: 0.84, blue: 0.52)
-    static let green = adaptive(NSColor(red: 0.08, green: 0.50, blue: 0.27, alpha: 1), NSColor(red: 0.16, green: 0.60, blue: 0.35, alpha: 1))
-    static let red = adaptive(NSColor(red: 0.82, green: 0.16, blue: 0.22, alpha: 1), NSColor(red: 0.90, green: 0.30, blue: 0.34, alpha: 1))
+    // Button fills are the same in both modes: white text on them is 5:1 or better. Text and icons on the popover adapt.
+    static let primary = Color(red: 0.31, green: 0.27, blue: 0.90)
+    static let green = Color(red: 0.08, green: 0.50, blue: 0.27)
+    static let red = Color(red: 0.82, green: 0.16, blue: 0.22)
+    static let primaryText = adaptive(NSColor(red: 0.22, green: 0.18, blue: 0.72, alpha: 1), NSColor(red: 0.65, green: 0.67, blue: 0.99, alpha: 1))
+    static let mint = adaptive(NSColor(red: 0.06, green: 0.56, blue: 0.31, alpha: 1), NSColor(red: 0.30, green: 0.84, blue: 0.52, alpha: 1))
+    static let orange = adaptive(NSColor(red: 0.78, green: 0.38, blue: 0.0, alpha: 1), NSColor(red: 1.0, green: 0.62, blue: 0.04, alpha: 1))
+    static let alert = adaptive(NSColor(red: 0.82, green: 0.16, blue: 0.22, alpha: 1), NSColor(red: 0.98, green: 0.45, blue: 0.47, alpha: 1))
 }
 
 /// Color tells you what a button is for: blue is the main action, green brings something back, red stops something.
@@ -71,6 +74,7 @@ struct BandBackground: View {
 struct RootView: View {
     @EnvironmentObject var store: Store
     @FocusState private var filterFocused: Bool
+    @Environment(\.colorScheme) private var scheme
 
     // Fixed so the popover never changes size while you filter or toggle.
     private let listHeight: CGFloat = 440
@@ -120,6 +124,7 @@ struct RootView: View {
         }
         .frame(width: 470)
         .tint(Brand.primary)
+        .background { if !Theme.flat { Rectangle().fill(scheme == .dark ? Color(white: 0.10) : Color.white).opacity(store.backdropTint) } }
         .background { if let m = Theme.matte { Rectangle().fill(m) } }
         .onReceive(NotificationCenter.default.publisher(for: .popoverDidShow)) { _ in
             store.query = ""
@@ -135,7 +140,7 @@ struct RootView: View {
                 .focused($filterFocused)
                 .onSubmit { if let first = store.visible.first { store.primary(first) } }
             Button { Task { await store.refresh() } } label: { Image(systemName: "arrow.clockwise") }
-                .buttonStyle(.borderless).help("Rescan now")
+                .buttonStyle(.borderless).tip("Rescan now")
         }
         .padding(.horizontal, 12).padding(.vertical, 9)
     }
@@ -219,7 +224,7 @@ struct PortCard: View {
         let next = Ports.nextFree(after: port, taken: Set(store.entries.map(\.port)))
         HStack(spacing: 10) {
             Image(systemName: inUse ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-                .foregroundStyle(inUse ? Color.orange : Brand.green).font(.title3)
+                .foregroundStyle(inUse ? Brand.orange : Brand.green).font(.title3)
             VStack(alignment: .leading, spacing: 1) {
                 Text(inUse ? "Port \(String(port)) is in use" : "Port \(String(port)) is free").font(.system(size: 13, weight: .semibold))
                 Text(!inUse ? "Go ahead and start your server"
@@ -230,11 +235,11 @@ struct PortCard: View {
             Spacer()
             if inUse {
                 Button("Copy \(String(next))") { Actions.copy(String(next)); store.flash("Copied \(next), the next free port") }
-                    .buttonStyle(PillButton(tone: .quiet, width: 74)).help("Copy the next free port number")
+                    .buttonStyle(PillButton(tone: .quiet, width: 74)).tip("Copy the next free port number")
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background((inUse ? Color.orange : Brand.green).opacity(0.12))
+        .background((inUse ? Brand.orange : Brand.green).opacity(0.12))
     }
 }
 
@@ -268,7 +273,7 @@ struct GroupHeader: View {
                     .hoverTip("Project actions: open in editor, start, restart or stop everything", tint: Brand.primary)
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-            .help(group.path.map { "Project actions for \(abbreviateHome($0))" } ?? "Group actions")
+            .tip(group.path.map { "Project actions for \(abbreviateHome($0))" } ?? "Group actions")
         }
         .padding(.horizontal, 12).padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -307,12 +312,12 @@ struct RowView: View {
                     if entry.web == .api {
                         Text("API").font(.system(size: 9, weight: .bold)).padding(.horizontal, 4).padding(.vertical, 1)
                             .background(.secondary.opacity(0.2), in: Capsule()).foregroundStyle(.secondary)
-                            .help("Answers HTTP but not with a web page")
+                            .tip("Answers HTTP but not with a web page")
                     }
                     health
                     if entry.lanExposed {
-                        Image(systemName: "wifi").font(.system(size: 9)).foregroundStyle(.orange)
-                            .help("Anyone on your network can reach this server (it listens on all interfaces)")
+                        Image(systemName: "wifi").font(.system(size: 9)).foregroundStyle(Brand.orange)
+                            .tip("Anyone on your network can reach this server (it listens on all interfaces)")
                     }
                     if store.isPinned(entry.key) { Image(systemName: "pin.fill").font(.system(size: 8)).foregroundStyle(.secondary) }
                 }
@@ -324,18 +329,19 @@ struct RowView: View {
                 if let t = tunnels.tunnels[entry.port] { TunnelLine(tunnel: t) }
             }
             .layoutPriority(1)
+            .tip("Details: PID \(entry.pid.map(String.init) ?? "-"), started with:\n\(entry.command)")
             Spacer(minLength: 4)
             if let label = busyLabel {
                 Text(label).font(.caption).foregroundStyle(.secondary)
                 ProgressView().controlSize(.small)
             } else {
                 if armed {
-                    Text("Stop \(entry.title)?").font(.caption).foregroundStyle(.red)
+                    Text("Stop \(entry.title)?").font(.caption).foregroundStyle(Brand.alert)
                 } else if hover {
                     secondaryActions
                 } else if let up = entry.uptime {
                     Text("up \(up)").font(.caption).foregroundStyle(.secondary).lineLimit(1).fixedSize()
-                        .help("Running for \(up)")
+                        .tip("Running for \(up)")
                 }
                 mainButton
             }
@@ -344,15 +350,14 @@ struct RowView: View {
         .frame(height: 44)
         .background(store.recent.contains(entry.key) ? Brand.mint.opacity(0.20) : (hover ? Color.primary.opacity(0.07) : .clear))
         .onHover { hover = $0; store.setHover(entry.key, $0) }
-        .help("PID \(entry.pid.map(String.init) ?? "-")  \(entry.command)")
     }
 
     @ViewBuilder private var health: some View {
         if let s = entry.status, let ms = entry.ms {
             if s >= 500 {
-                Text("\(s)").font(.system(size: 10, weight: .bold)).foregroundStyle(.red).help("The server answered HTTP \(s)")
+                Text("\(s)").font(.system(size: 10, weight: .bold)).foregroundStyle(Brand.alert).tip("The server answered HTTP \(s)")
             } else {
-                Text("\(ms) ms").font(.system(size: 10)).foregroundStyle(.secondary).help("HTTP \(s) in \(ms) ms")
+                Text("\(ms) ms").font(.system(size: 10)).foregroundStyle(.secondary).tip("HTTP \(s) in \(ms) ms")
             }
         }
     }
@@ -365,14 +370,14 @@ struct RowView: View {
             Button { store.open(entry) } label: { Text("Open") }
                 .buttonStyle(PillButton(tone: .open))
                 .onHover { store.setTip($0 ? "Open \(entry.address) in your browser  (⌘O)" : nil) }
-                .help("Open \(entry.address) in your browser  (⌘O)")
+                .tip("Open \(entry.address) in your browser  (⌘O)")
         } else {
             Button { store.copyLocal(entry) } label: {
                 Text(copied ? "Copied ✓" : entry.copyLabel).animation(Motion.anim, value: copied)
             }
             .buttonStyle(PillButton(tone: copied ? .copied : .quiet))
             .onHover { store.setTip($0 ? "Copy \(entry.address)  (⌘C)" : nil) }
-            .help("Copy \(entry.address)  (⌘C)")
+            .tip("Copy \(entry.address)  (⌘C)")
         }
     }
 
@@ -386,7 +391,7 @@ struct RowView: View {
                 .disabled(!canRestart)
             IconButton(symbol: "terminal", help: "Logs: follow the output in Terminal  (⌘L)") { store.tail(entry) }
             shareMenu
-            IconButton(symbol: "stop.fill", help: "Stop this server  (⌘⌫)", tint: Brand.red) { store.kill(entry) }
+            IconButton(symbol: "stop.fill", help: "Stop this server  (⌘⌫)", tint: Brand.alert) { store.kill(entry) }
             moreMenu
         }
     }
@@ -413,7 +418,7 @@ struct RowView: View {
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         .disabled(entry.web == .none)
-        .help("Share this server")
+        .tip("Share this server")
     }
 
     private var moreMenu: some View {
@@ -431,7 +436,7 @@ struct RowView: View {
                 .hoverTip("More: pin, rename, open the project in your editor", tint: Brand.primary)
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-        .help("More: pin, rename, open project")
+        .tip("More: pin, rename, open project")
     }
 }
 
@@ -463,7 +468,7 @@ struct StoppedRow: View {
                     Button { store.start(server) } label: { Text("Start") }
                         .buttonStyle(PillButton(tone: .start))
                         .onHover { store.setTip($0 ? (server.containerID != nil ? "Start this container again  (⌘R)" : "Run it again in \(abbreviateHome(server.start?.cwd ?? ""))  (⌘R)") : nil) }
-                        .help((server.containerID != nil ? "Start this container again" : "Run it again in \(abbreviateHome(server.start?.cwd ?? ""))") + "  (⌘R)")
+                        .tip((server.containerID != nil ? "Start this container again" : "Run it again in \(abbreviateHome(server.start?.cwd ?? ""))") + "  (⌘R)")
                 } else {
                     Text("not running").font(.caption).foregroundStyle(.secondary)
                 }
@@ -485,7 +490,7 @@ struct TunnelLine: View {
             case .starting: Text("Creating public link…")
             case .running(let url):
                 Button(url) { Actions.copy(url); Store.shared.flash("Public link copied: \(url)") }
-                    .buttonStyle(.plain).underline().help("Public link, click to copy again")
+                    .buttonStyle(.plain).underline().tip("Public link, click to copy again")
             case .failed(let why): Text("Public link failed (\(why))")
             }
         }
@@ -504,8 +509,8 @@ struct HoverTip: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hover ? tint.opacity(0.16) : .clear))
-            .onHover { hover = $0; store.setTip($0 ? text : nil) }
-            .onDisappear { if hover { store.setTip(nil) } }
+            .onHover { hover = $0; store.setTip($0 ? text : nil); $0 ? TipWindow.shared.show(text) : TipWindow.shared.hide() }
+            .onDisappear { if hover { store.setTip(nil); TipWindow.shared.hide() } }
     }
 }
 
@@ -527,6 +532,5 @@ struct IconButton: View {
         }
         .buttonStyle(.borderless)
         .hoverTip(help, tint: tint ?? Brand.primary)
-        .help(help)
     }
 }

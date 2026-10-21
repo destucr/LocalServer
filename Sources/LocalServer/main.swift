@@ -7,6 +7,19 @@ if CommandLine.arguments.contains("--scan") {
     }
     exit(0)
 }
+// Debug helper: `LocalServer --tip "text"` shows the tooltip bubble for a few seconds.
+if let i = CommandLine.arguments.firstIndex(of: "--tip"), CommandLine.arguments.count > i + 1 {
+    MainActor.assumeIsolated {
+        _ = NSApplication.shared
+        TipWindow.shared.show(CommandLine.arguments[i + 1], delay: 0)
+        RunLoop.current.run(until: Date().addingTimeInterval(4))
+    }
+    exit(0)
+}
+
+// Debug helper: `LocalServer --contrast` prints the extra tint chosen for a few wallpapers.
+if CommandLine.arguments.contains("--contrast") { Backdrop.report(); exit(0) }
+
 // Build helper: `LocalServer --icon out.png` draws the app icon.
 if let i = CommandLine.arguments.firstIndex(of: "--icon"), CommandLine.arguments.count > i + 1 {
     _ = NSApplication.shared

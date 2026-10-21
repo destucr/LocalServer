@@ -22,7 +22,7 @@ final class HotKey {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     static let shortcutLabel = "⌃⌥P"
 
     private let store = Store.shared
@@ -41,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         popover.behavior = .transient
         popover.animates = false
+        popover.delegate = self
         // An explicit vibrancy view, so the blur does not depend on popover defaults.
         let host = NSHostingController(rootView: RootView().environmentObject(store))
         host.sizingOptions = []
@@ -84,6 +85,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func popoverDidClose(_ notification: Notification) { TipWindow.shared.hide() }
+
     private func updateTitle() {
         let n = store.count
         item.button?.image = IconArt.menuBar(active: n > 0)
@@ -94,6 +97,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggle() {
         if popover.isShown { popover.performClose(nil); return }
         guard let b = item.button else { return }
+        let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        store.refreshBackdrop(screen: b.window?.screen, dark: dark)
         NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: b.bounds, of: b, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()

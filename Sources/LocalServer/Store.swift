@@ -19,6 +19,7 @@ final class Store: ObservableObject {
     @Published var busy: [String: String] = [:]   // row key → what it is doing, e.g. "Restarting…"
     @Published var copiedID: String?
     @Published private(set) var hoverKey: String?
+    @Published private(set) var backdropTint: Double = 0.12   // extra tint so text stays readable over the wallpaper
     @Published private(set) var tip: String?   // what the hovered icon does, shown in the footer
     @Published private(set) var recent: Set<String> = []   // servers that just appeared
     private var knownRunningKeys: Set<String>?
@@ -222,6 +223,12 @@ final class Store: ObservableObject {
             try? await Task.sleep(for: .seconds(4))
             if !Task.isCancelled { self?.message = nil }
         }
+    }
+
+    /// Called each time the popover opens: read the wallpaper under it and set the tint that keeps text readable.
+    func refreshBackdrop(screen: NSScreen?, dark: Bool) {
+        let t = Backdrop.tint(screen: screen, dark: dark)
+        if abs(t - backdropTint) > 0.005 { backdropTint = t }
     }
 
     // MARK: Hover and shortcuts
