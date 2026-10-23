@@ -412,6 +412,32 @@ if CommandLine.arguments.contains("--port-e2e") {
     exit(0)
 }
 
+// Debug helper: `Switchboard --move-e2e 8899 8898` moves the real server on the first port to the second, like a double click on its port.
+if let i = CommandLine.arguments.firstIndex(of: "--move-e2e"), CommandLine.arguments.count > i + 2,
+   let from = Int(CommandLine.arguments[i + 1]), let to = Int(CommandLine.arguments[i + 2]) {
+    MainActor.assumeIsolated {
+        _ = NSApplication.shared
+        let store = Store.shared
+        func spin(until cond: () -> Bool, timeout: Double = 25) -> Bool {
+            let end = Date().addingTimeInterval(timeout)
+            while Date() < end { if cond() { return true }; RunLoop.current.run(until: Date().addingTimeInterval(0.1)) }
+            return cond()
+        }
+        Task { await store.refresh() }
+        _ = spin(until: { store.entries.contains { $0.port == from } })
+        guard let entry = store.entries.first(where: { $0.port == from }) else { print("nothing on :\(from)"); exit(1) }
+        print("before: pid", entry.pid.map(String.init) ?? "-", "root", entry.restart.map { String($0.rootPid) } ?? "-")
+        store.changePort(entry, to: to)
+        _ = spin(until: { Probe.isListening(to) && !Probe.isListening(from) }, timeout: 15)
+        print("new port up:", Probe.isListening(to), "| old port closed:", !Probe.isListening(from), "| message:", store.message ?? "-")
+        _ = spin(until: { false }, timeout: 4)   // let the follow-up refreshes run, then show the list as the popover would
+        Task { await store.refresh() }
+        _ = spin(until: { false }, timeout: 2)
+        for g in store.groups { print("list:", g.name, "running", g.running.map(\.port), "stopped", g.stopped.map(\.port)) }
+    }
+    exit(0)
+}
+
 // Debug helper: `Switchboard --undo-e2e` stops a real server through the Stop path, presses Undo, and checks it comes back.
 if CommandLine.arguments.contains("--undo-e2e") {
     MainActor.assumeIsolated {
