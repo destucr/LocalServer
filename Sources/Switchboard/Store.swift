@@ -48,6 +48,7 @@ final class Store: ObservableObject {
     private var knownRunningKeys: Set<String>?
     private var refreshTick = 0
     @Published var armedKill: String?
+    @Published private(set) var editing: InlineEdit?   // the port or name being edited in its row
     @Published private(set) var names: [String: String] = [:]
     @Published private(set) var pinned: Set<String> = []
     @Published var showStopped: Bool { didSet { UserDefaults.standard.set(showStopped, forKey: "showStopped") } }
@@ -168,6 +169,7 @@ final class Store: ObservableObject {
         let result = await Task.detached(priority: .utility) { Scanner.scan() }.value
         if result != entries { withAnimation(Motion.anim) { entries = result } }
         if let s = selectedKey, !navKeys.contains(s) { selectedKey = nil }
+        if let ed = editing, !result.contains(where: { $0.key == ed.key }) || busy[ed.key] != nil { editing = nil }   // the server went away or got busy
         guard persistent else { return }
         refreshTick += 1
         if refreshTick % 20 == 0 { checkUpdate(force: false) }   // the app can run for days, so ask again while it runs
@@ -537,6 +539,43 @@ final class Store: ObservableObject {
     }
 
     /// Asks for a port, then restarts the server there.
+    // MARK: Editing in the row
+
+    struct InlineEdit: Equatable { enum Field { case port, name }; var key: String; var field: Field }
+
+    /// Double click on a port or a name. A port that can't be changed says why instead of opening a field that would fail.
+    func beginEdit(_ e: PortEntry, _ field: InlineEdit.Field) {
+        guard busy[e.key] == nil else { return }
+        if field == .port && (e.container != nil || e.restart == nil) { flash("Switchboard can't restart this one, so it can't change its port."); return }
+        editing = InlineEdit(key: e.key, field: field)
+    }
+
+    func cancelEdit() { editing = nil }
+
+    /// A field that lost focus cancels only its own edit, so starting another row's edit is not undone by the old field.
+    func cancelEdit(key: String, field: InlineEdit.Field) { if editing == InlineEdit(key: key, field: field) { editing = nil } }
+
+    /// Returns false when the text is not usable, so the field stays open with the message showing.
+    @discardableResult func commitPort(_ e: PortEntry, text: String) -> Bool {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        if busy[e.key] != nil { editing = nil; return true }   // it started doing something else while the field was open
+        if t.isEmpty || t == String(e.port) { editing = nil; return true }
+        guard let port = Int(t), (1024...65535).contains(port) else { flash("Use a port between 1024 and 65535."); return false }
+        guard Ports.isFree(port) else { flash("Port \(port) is already in use."); return false }
+        editing = nil
+        changePort(e, to: port)
+        return true
+    }
+
+    func commitName(_ e: PortEntry, text: String) {
+        editing = nil
+        let t = text.trimmingCharacters(in: .whitespaces)
+        let new: String? = (t.isEmpty || t == e.title) ? nil : t
+        guard names[e.key] != new else { return }
+        names[e.key] = new
+        dirty = true; persist(force: true)
+    }
+
     func askPort(_ e: PortEntry) {
         let suggestion = Ports.nextFree(after: e.port, taken: Set(entries.map(\.port)))
         guard let text = Dialogs.prompt("Change port of \(displayName(e))", "Restarts it on another port. It is on :\(e.port) now.", value: String(suggestion)),

@@ -281,6 +281,36 @@ if CommandLine.arguments.contains("--selftest") {
         check("everything shows again", t.shown.count == 4 && !t.filtering)
     }
 
+    // Editing in the row: bad input keeps the field open, good input or nothing closes it.
+    MainActor.assumeIsolated {
+        func row(_ port: Int, restartable: Bool) -> PortEntry {
+            PortEntry(id: "\(port)", port: port, host: "127.0.0.1", lanExposed: false, kind: .dev, title: "Vite", pid: 1, command: "", projectName: "a",
+                      projectPath: "/p/a", group: "a", uptime: nil, container: nil, web: .page, restart: restartable ? RestartSpec(exec: "/bin/true", argv: [], env: [:], cwd: "/p/a", rootPid: 1) : nil)
+        }
+        let a = row(5173, restartable: true), b = row(3000, restartable: false)
+        let s = Store(sample: [a, b])
+        s.beginEdit(b, .port)
+        check("a port that can't change does not open a field", s.editing == nil)
+        s.beginEdit(a, .port)
+        check("a port opens a field", s.editing?.field == .port)
+        check("letters are refused and the field stays", !s.commitPort(a, text: "abc") && s.editing != nil)
+        check("a low port is refused", !s.commitPort(a, text: "80") && s.editing != nil)
+        check("a huge port is refused", !s.commitPort(a, text: "70000") && s.editing != nil)
+        check("a negative port is refused", !s.commitPort(a, text: "-3000") && s.editing != nil)
+        check("an empty field closes without changing", s.commitPort(a, text: "  ") && s.editing == nil)
+        s.beginEdit(a, .port)
+        check("the same port closes without changing", s.commitPort(a, text: "5173 ") && s.editing == nil)
+        s.beginEdit(a, .port); s.beginEdit(b, .name)
+        s.cancelEdit(key: a.key, field: .port)
+        check("an old field losing focus does not cancel the new edit", s.editing == .init(key: b.key, field: .name))
+        s.commitName(b, text: "  Shop  ")
+        check("a name is trimmed and saved", s.names[b.key] == "Shop" && s.editing == nil)
+        s.beginEdit(b, .name); s.commitName(b, text: "")
+        check("an empty name goes back to the original", s.names[b.key] == nil)
+        s.beginEdit(b, .name); s.commitName(b, text: "Vite")
+        check("the original name is not stored as a custom one", s.names[b.key] == nil)
+    }
+
     let plain = PortEntry(id: "c", port: 3000, host: "127.0.0.1", lanExposed: false, kind: .dev, title: "x", pid: 1, command: "", projectName: "p", projectPath: "/p", group: "p", uptime: nil, container: nil, web: .page, restart: nil)
     check("copy as curl", plain.curl == "curl -i http://localhost:3000")
 

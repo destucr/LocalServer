@@ -343,6 +343,8 @@ struct RowView: View {
     @ObservedObject private var tunnels: TunnelManager
     let entry: PortEntry
     @State private var hover = false
+    @State private var draft = ""
+    @FocusState private var fieldFocused: Bool
 
     init(entry: PortEntry) {
         self.entry = entry
@@ -354,16 +356,58 @@ struct RowView: View {
     private var busyLabel: String? { store.busy[entry.key] }
     private var copied: Bool { store.copiedID == entry.id }
     private var canRestart: Bool { entry.container != nil || entry.restart != nil }
+    private var editingPort: Bool { store.editing == .init(key: entry.key, field: .port) }
+    private var editingName: Bool { store.editing == .init(key: entry.key, field: .name) }
 
-    var body: some View {
-        HStack(spacing: 10) {
-            Circle().fill(Brand.mint).frame(width: 7, height: 7)
+    /// A text field in place of the label. Return saves, Esc or clicking away cancels.
+    private func editor(_ field: Store.InlineEdit.Field, width: CGFloat?, size: CGFloat, weight: Font.Weight, commit: @escaping (String) -> Void) -> some View {
+        TextField("", text: $draft)
+            .textFieldStyle(.plain).font(.system(size: size, weight: weight)).monospacedDigit()
+            .focused($fieldFocused)
+            .onSubmit { commit(draft) }
+            .padding(.horizontal, 4).padding(.vertical, 1)
+            .background(RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.08)))
+            .overlay(RoundedRectangle(cornerRadius: 4).stroke(Brand.primary, lineWidth: 1))
+            .frame(width: width)
+            .onAppear {
+                DispatchQueue.main.async {
+                    fieldFocused = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil) }   // typing replaces the old value
+                }
+            }
+            .onChange(of: fieldFocused) { _, on in if !on { store.cancelEdit(key: entry.key, field: field) } }
+    }
+
+    @ViewBuilder private var portLabel: some View {
+        if editingPort {
+            editor(.port, width: 58, size: 15, weight: .semibold) { _ = store.commitPort(entry, text: $0) }
+        } else {
             Text(String(entry.port))
                 .font(.system(size: 15, weight: .semibold)).monospacedDigit()
                 .frame(width: 58, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { draft = String(entry.port); store.beginEdit(entry, .port) }
+                .tip(canRestart && entry.container == nil ? "Double click to change the port" : "PID \(entry.pid.map(String.init) ?? "-")")
+        }
+    }
+
+    @ViewBuilder private var nameLabel: some View {
+        if editingName {
+            editor(.name, width: 160, size: 13, weight: .regular) { store.commitName(entry, text: $0) }
+        } else {
+            Text(store.displayName(entry)).font(.system(size: 13)).lineLimit(1)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { draft = store.names[entry.key] ?? entry.title; store.beginEdit(entry, .name) }
+        }
+    }
+
+    private var content: some View {
+        HStack(spacing: 10) {
+            Circle().fill(Brand.mint).frame(width: 7, height: 7)
+            portLabel
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
-                    Text(store.displayName(entry)).font(.system(size: 13)).lineLimit(1)
+                    nameLabel
                     if store.isRenamed(entry) {
                         Text(entry.title).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
                     }
@@ -387,7 +431,7 @@ struct RowView: View {
                 if let t = tunnels.tunnels[entry.port] { TunnelLine(tunnel: t) }
             }
             .layoutPriority(1)
-            .tip("PID \(entry.pid.map(String.init) ?? "-")\n\(entry.command)")
+            .tip("PID \(entry.pid.map(String.init) ?? "-")\n\(entry.command)\nDouble click the name to rename")
             Spacer(minLength: 4)
             if let label = busyLabel {
                 Text(label).font(.caption).foregroundStyle(.secondary)
@@ -410,12 +454,18 @@ struct RowView: View {
                     : (store.keyboardMode && active ? Brand.primary.opacity(0.14) : (active ? Color.primary.opacity(0.07) : .clear)))
         .overlay(alignment: .leading) { if store.keyboardMode && active { Rectangle().fill(Brand.primary).frame(width: 3) } }
         .onHover { hover = $0; store.setHover(entry.key, $0) }
+    }
+
+    var body: some View {
+        content
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(store.displayName(entry)), port \(entry.port)\(entry.web == .api ? ", API" : ""), running\(entry.uptime.map { " for \($0)" } ?? "")\(entry.status.map { $0 >= 500 ? ", returning error \($0)" : "" } ?? "")")
         .accessibilityHint(entry.web == .page ? "Opens in your browser" : "Copies \(entry.address)")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { store.primary(entry) }
         .accessibilityAction(named: "Restart") { if canRestart { store.restart(entry) } }
+        .accessibilityAction(named: "Change port") { draft = String(entry.port); store.beginEdit(entry, .port) }
+        .accessibilityAction(named: "Rename") { draft = store.names[entry.key] ?? entry.title; store.beginEdit(entry, .name) }
         .accessibilityAction(named: "Show logs") { store.tail(entry) }
         .accessibilityAction(named: "Copy \(entry.address)") { store.copyLocal(entry) }
         .accessibilityAction(named: "Stop") { store.kill(entry) }

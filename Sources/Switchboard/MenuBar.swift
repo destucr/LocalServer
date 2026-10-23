@@ -74,6 +74,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             guard let self, self.popover.isShown else { return ev }
             let flags = ev.modifierFlags.intersection(.deviceIndependentFlagsMask)
             let handled: Bool = MainActor.assumeIsolated {
+                if self.store.editing != nil {   // typing in a row: Esc cancels, everything else belongs to the field
+                    if flags.isEmpty, ev.keyCode == 53 { self.store.cancelEdit(); return true }
+                    return false
+                }
                 if flags.isEmpty, ev.keyCode == 53, self.store.escapeLogs() { return true }
                 if flags.isEmpty, !self.store.showMap {
                     switch ev.keyCode {
@@ -101,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func popoverDidClose(_ notification: Notification) {
         TipWindow.shared.hide()
+        MainActor.assumeIsolated { store.cancelEdit() }
         if let m = outsideClick { NSEvent.removeMonitor(m); outsideClick = nil }
         MainActor.assumeIsolated { store.logs?.stop() }   // nothing reads the file while the popover is hidden
     }
