@@ -269,6 +269,21 @@ if CommandLine.arguments.contains("--selftest") {
         t.stop()
     }
 
+    // Errors-only filter combines with the text filter.
+    MainActor.assumeIsolated {
+        let t = LogTail(source: .file("/nonexistent"), title: "t", key: "k")
+        t.preload("ok line\nwarn: slow\nError: boom\nfine again")
+        t.problemsOnly = true
+        check("errors only keeps errors and warnings", t.shown.map(\.text) == ["warn: slow", "Error: boom"])
+        t.query = "boom"
+        check("errors only works with the text filter", t.shown.map(\.text) == ["Error: boom"])
+        t.problemsOnly = false; t.query = ""
+        check("everything shows again", t.shown.count == 4 && !t.filtering)
+    }
+
+    let plain = PortEntry(id: "c", port: 3000, host: "127.0.0.1", lanExposed: false, kind: .dev, title: "x", pid: 1, command: "", projectName: "p", projectPath: "/p", group: "p", uptime: nil, container: nil, web: .page, restart: nil)
+    check("copy as curl", plain.curl == "curl -i http://localhost:3000")
+
     // Update check: numeric version order, and only real releases count.
     check("1.10.0 is newer than 1.9.0", Updates.isNewer("1.10.0", than: "1.9.0"))
     check("the same version is not newer", !Updates.isNewer("v1.7.0", than: "1.7.0"))

@@ -23,6 +23,7 @@ final class LogTail: ObservableObject {
     @Published private(set) var note: String?   // why nothing is coming in, when there is a reason
     @Published var query = ""
     @Published var follow = true
+    @Published var problemsOnly = false   // show only errors and warnings
 
     private static let cap = 3000
     private static let maxLine = 4000
@@ -41,8 +42,12 @@ final class LogTail: ObservableObject {
 
     var shown: [LogLine] {
         let q = query.trimmingCharacters(in: .whitespaces)
-        return q.isEmpty ? lines : lines.filter { $0.text.localizedCaseInsensitiveContains(q) }
+        return lines.filter { l in
+            (!problemsOnly || l.kind == .error || l.kind == .warn) && (q.isEmpty || l.text.localizedCaseInsensitiveContains(q))
+        }
     }
+
+    var filtering: Bool { problemsOnly || !query.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var text: String { shown.map(\.text).joined(separator: "\n") }
 
@@ -185,6 +190,9 @@ struct LogView: View {
     @EnvironmentObject var store: Store
     @ObservedObject var tail: LogTail
     private var running: Bool { store.entries.contains { $0.key == tail.key } }
+    @State private var atBottom = true       // the end of the list is on screen
+    @State private var pausedByScroll = false   // following stopped because you scrolled up, so scrolling back down resumes it
+    @State private var wheel: Any?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -209,6 +217,9 @@ struct LogView: View {
                 .frame(maxWidth: 120, alignment: .leading)
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
             TextField("Filter logs", text: $tail.query).textFieldStyle(.plain)
+            IconButton(symbol: "exclamationmark.triangle", help: tail.problemsOnly ? "Showing errors and warnings only. Click to show everything." : "Show only errors and warnings", tint: tail.problemsOnly ? Brand.orange : nil) {
+                tail.problemsOnly.toggle()
+            }
             IconButton(symbol: tail.follow ? "arrow.down.to.line.compact" : "pause", help: tail.follow ? "Following new lines. Click to pause." : "Paused. Click to follow.", tint: tail.follow ? Brand.green : nil) {
                 tail.follow.toggle()
             }
@@ -223,7 +234,7 @@ struct LogView: View {
         let shown = tail.shown
         if shown.isEmpty {
             VStack(spacing: 6) {
-                Text(tail.lines.isEmpty ? "No output yet" : "No lines match “\(tail.query)”").font(.system(size: 13, weight: .semibold))
+                Text(tail.lines.isEmpty ? "No output yet" : tail.problemsOnly && tail.query.isEmpty ? "No errors or warnings" : "No lines match “\(tail.query)”").font(.system(size: 13, weight: .semibold))
                 if tail.lines.isEmpty { Text("New lines appear here as the server prints them.").font(.callout).foregroundStyle(.secondary) }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -238,19 +249,46 @@ struct LogView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .id(l.id)
                         }
+                        Color.clear.frame(height: 1).id("end")
+                            .onAppear { atBottom = true }
+                            .onDisappear { atBottom = false }
                     }
                     .textSelection(.enabled)
                     .padding(.horizontal, 10).padding(.vertical, 6)
                 }
                 .onChange(of: shown.last?.id) { _, id in
-                    if tail.follow, let id { proxy.scrollTo(id, anchor: .bottom) }
+                    if tail.follow, id != nil { proxy.scrollTo("end", anchor: .bottom) }
                 }
                 .onChange(of: tail.follow) { _, on in
-                    if on, let id = shown.last?.id { proxy.scrollTo(id, anchor: .bottom) }
+                    if on { pausedByScroll = false; proxy.scrollTo("end", anchor: .bottom) }
                 }
-                .onAppear { if let id = shown.last?.id { proxy.scrollTo(id, anchor: .bottom) } }
+                .onAppear {
+                    proxy.scrollTo("end", anchor: .bottom)
+                    wheel = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { e in
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { scrolled() }
+                        return e
+                    }
+                }
+                .onDisappear { if let w = wheel { NSEvent.removeMonitor(w) }; wheel = nil }
+                .overlay(alignment: .bottom) {
+                    if !tail.follow {
+                        Button { tail.follow = true } label: {
+                            Label("Jump to latest", systemImage: "arrow.down").font(.caption.weight(.semibold))
+                                .foregroundStyle(.white).padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(Capsule().fill(Brand.primary))
+                        }
+                        .buttonStyle(.plain).padding(.bottom, 8)
+                        .transition(.opacity)
+                    }
+                }
             }
         }
+    }
+
+    /// Scrolling up pauses following. Scrolling back to the end picks it up again, but only if the scroll paused it.
+    private func scrolled() {
+        if tail.follow && !atBottom { tail.follow = false; pausedByScroll = true }
+        else if !tail.follow && pausedByScroll && atBottom { tail.follow = true }
     }
 
     private func color(_ k: LogLine.Kind) -> Color {

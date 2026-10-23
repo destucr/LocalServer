@@ -60,6 +60,9 @@ struct PortEntry: Identifiable, Hashable {
         return "localhost:\(port)"
     }
 
+    /// A command that fetches the page. A local https server usually has a certificate curl doesn't trust, so those get -k.
+    var curl: String { "curl -i\(localURL.scheme == "https" ? "k" : "") \(localURL.absoluteString)" }
+
     var copyLabel: String { address.contains("://") ? "Copy URL" : "Copy address" }
 
     var localURL: URL { URL(string: "\(port == 443 || port == 8443 ? "https" : "http")://localhost:\(port)")! }

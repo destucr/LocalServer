@@ -739,6 +739,13 @@ final class Store: ObservableObject {
         markCopied(e.id)
     }
 
+    func copyCurl(_ e: PortEntry) {
+        let cmd = e.curl
+        Actions.copy(cmd)
+        flash("Copied \(cmd)")
+        markCopied(e.id)
+    }
+
     func markCopied(_ id: String) {
         copiedID = id
         Task { try? await Task.sleep(for: .seconds(1.6)); if copiedID == id { copiedID = nil } }

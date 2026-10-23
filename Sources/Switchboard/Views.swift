@@ -472,6 +472,7 @@ struct RowView: View {
             Button(entry.lanExposed ? "Copy link for your Wi-Fi:  \(lan)" : "Copy link for your Wi-Fi (won't work, localhost only)") {
                 store.copyLAN(entry)
             }
+            if entry.web != .none { Button("Copy as curl") { store.copyCurl(entry) } }
             Button("Show QR code to open on your phone…") { store.showQR(entry) }
             Divider()
             if tunnels.tunnels[entry.port] != nil {
@@ -665,6 +666,7 @@ struct ServerMenu: View {
         Button("Rename…") { store.rename(entry) }
         Button("Change port…") { store.askPort(entry) }.disabled(entry.container != nil || entry.restart == nil)
         if entry.web != .none {
+            Button("Copy as curl") { store.copyCurl(entry) }
             Button("Copy Wi-Fi link") { store.copyLAN(entry) }
             Button("Show QR code for your phone…") { store.showQR(entry) }
         }

@@ -4,6 +4,11 @@ All notable changes to Switchboard. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Added
+- Logs have a button that shows only errors and warnings.
+- Scrolling up in the logs pauses following, and a Jump to latest button brings you back. Scrolling to the end resumes it.
+- Copy as curl, in the right-click menu and the share menu.
+
 ## [1.8.4] - 2026-10-22
 
 ### Fixed
