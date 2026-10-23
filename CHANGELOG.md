@@ -4,6 +4,8 @@ All notable changes to Switchboard. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-10-23
+
 ### Added
 - Double click a port to change it in place, or a name to rename it. Return saves, Esc cancels. A bad port keeps the field open and says why.
 
